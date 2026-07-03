@@ -1,0 +1,39 @@
+# Dependency directories
+node_modules/
+client/node_modules/
+server/node_modules/
+
+# Production build outputs
+client/dist/
+
+# SQLite databases and logs
+server/data/*.sqlite
+server/data/*.sqlite-journal
+
+# Upload files (ignore uploaded excels, keep folder structure)
+server/uploads/*
+!server/uploads/.gitkeep
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Operating System files
+.DS_Store
+Thumbs.db
+
+# IDEs and editors configurations
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Excel and data files (GDPR/KVKK Compliance)
+*.xlsx
+*.xls
+example_excel/
+

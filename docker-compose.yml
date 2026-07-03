@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./server/data:/app/server/data
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - JWT_SECRET=kocaeli_uye_yonetim_sistemi_gizli_anahtar_987654321
+    restart: always
