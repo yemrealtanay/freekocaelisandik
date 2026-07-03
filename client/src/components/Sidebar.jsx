@@ -35,10 +35,10 @@ export default function Sidebar({ activeTab, onTabChange }) {
   return (
     <aside className="sidebar">
       <div className="sidebar-logo-area">
-        <span className="logo-badge">K</span>
+        <span className="logo-badge">I</span>
         <div className="logo-text">
-          <strong>Kocaeli</strong>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Üye Yönetim Sistemi</div>
+          <strong>Intra-K</strong>
+          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>İç İletişim Portalı</div>
         </div>
       </div>
       <nav className="sidebar-menu">

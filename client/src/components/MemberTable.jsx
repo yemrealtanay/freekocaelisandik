@@ -26,7 +26,7 @@ export function getRoleLabel(role) {
   }
 }
 
-export default function MemberTable({ members, onSelectMember }) {
+export default function MemberTable({ members, onSelectMember, onRoleChange }) {
   if (!members || members.length === 0) {
     return (
       <div style={{ textAlign: 'center', padding: '48px', color: 'var(--text-muted)' }}>
@@ -81,9 +81,30 @@ export default function MemberTable({ members, onSelectMember }) {
                   </div>
                 </td>
                 <td>
-                  <span className={`role-badge ${member.role}`}>
-                    {getRoleLabel(member.role)}
-                  </span>
+                  <select
+                    className={`role-badge ${member.role}`}
+                    value={member.role}
+                    onChange={(e) => onRoleChange(member.id, e.target.value)}
+                    style={{
+                      cursor: 'pointer',
+                      outline: 'none',
+                      fontFamily: 'inherit',
+                      paddingRight: '22px',
+                      backgroundPosition: 'right 6px center',
+                      backgroundRepeat: 'no-repeat',
+                      backgroundImage: `url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b96a8' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E")`,
+                      backgroundSize: '10px',
+                      WebkitAppearance: 'none',
+                      MozAppearance: 'none',
+                      appearance: 'none'
+                    }}
+                  >
+                    <option value="GOREVSIZ" style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-main)' }}>Görevsiz</option>
+                    <option value="SANDIK_GOREVLISI" style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-main)' }}>Sandık Görevlisi</option>
+                    <option value="SANDIK_SORUMLUSU" style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-main)' }}>Sandık Sorumlusu</option>
+                    <option value="MUSAHIT" style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-main)' }}>Müşahit</option>
+                    <option value="YEDEK" style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-main)' }}>Yedek</option>
+                  </select>
                 </td>
                 <td style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
                   {member.latest_action_date || '—'}

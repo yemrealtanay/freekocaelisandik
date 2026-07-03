@@ -8,8 +8,8 @@ export default function Header({ user, onLogout }) {
     <header className="header">
       {/* Fallback header title if sidebar is not active */}
       <div className="header-title-fallback">
-        <span className="logo-badge">K</span>
-        <span>Kocaeli Üye Yönetim Sistemi</span>
+        <span className="logo-badge">I</span>
+        <span>Intra-K</span>
       </div>
 
       <div className="header-user-info">

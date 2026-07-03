@@ -33,8 +33,8 @@ export default function Login({ onLoginSuccess }) {
     <div className="auth-container">
       <div className="auth-card">
         <div className="auth-header">
-          <div className="auth-logo">K</div>
-          <h2 className="auth-title">Kocaeli Üye Yönetimi</h2>
+          <div className="auth-logo">I</div>
+          <h2 className="auth-title">Intra-K</h2>
           <p className="auth-subtitle">Giriş yapmak için bilgilerinizi girin</p>
         </div>
 

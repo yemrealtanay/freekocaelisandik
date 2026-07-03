@@ -40,9 +40,29 @@ router.get('/', requireAuth, async (req, res) => {
     }
 
     if (search) {
-      query += ' AND (m.first_name LIKE ? OR m.last_name LIKE ? OR (m.first_name || " " || m.last_name) LIKE ? OR m.phone LIKE ?)';
-      const searchPattern = `%${search}%`;
-      params.push(searchPattern, searchPattern, searchPattern, searchPattern);
+      const cleanSearch = search.trim().toLowerCase();
+      const searchPattern = `%${cleanSearch}%`;
+      const spaceStrippedSearch = `%${cleanSearch.replace(/\s+/g, '')}%`;
+
+      query += ` AND (
+        LOWER(m.first_name) LIKE ? 
+        OR LOWER(m.last_name) LIKE ? 
+        OR LOWER(m.first_name || ' ' || m.last_name) LIKE ? 
+        OR m.phone LIKE ? 
+        OR m.ballot_no LIKE ? 
+        OR LOWER(REPLACE(m.school, ' ', '')) LIKE ? 
+        OR LOWER(REPLACE(m.district, ' ', '')) LIKE ?
+      )`;
+      
+      params.push(
+        searchPattern,       // first_name
+        searchPattern,       // last_name
+        searchPattern,       // fullname
+        searchPattern,       // phone
+        searchPattern,       // ballot_no
+        spaceStrippedSearch, // school (space/case insensitive)
+        spaceStrippedSearch  // district (space/case insensitive)
+      );
     }
 
     query += ' ORDER BY m.first_name ASC, m.last_name ASC';

@@ -232,11 +232,19 @@ export default function MembersPage({ currentUser }) {
       ) : (
         <>
           {viewMode === 'Tablo' && (
-            <MemberTable members={members} onSelectMember={setSelectedMember} />
+            <MemberTable 
+              members={members} 
+              onSelectMember={setSelectedMember} 
+              onRoleChange={handleRoleChangeInline}
+            />
           )}
 
           {viewMode === 'Kart' && (
-            <MemberCardView members={members} onSelectMember={setSelectedMember} />
+            <MemberCardView 
+              members={members} 
+              onSelectMember={setSelectedMember} 
+              onRoleChange={handleRoleChangeInline}
+            />
           )}
 
           {viewMode === 'Kanban' && (
