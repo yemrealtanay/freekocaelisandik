@@ -85,7 +85,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: '32px', alignItems: 'start' }}>
+      <div className="dashboard-split-layout">
         
         {/* District Table */}
         <div className="table-container" style={{ padding: '24px' }}>

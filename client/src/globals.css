@@ -1226,6 +1226,21 @@ button, input, select, textarea {
   to { transform: translate(-50%, 0); opacity: 1; }
 }
 
+/* Custom Split Layouts */
+.dashboard-split-layout {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 32px;
+  align-items: start;
+}
+
+.upload-split-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 32px;
+  align-items: start;
+}
+
 /* Responsive Styles */
 @media (max-width: 1024px) {
   .app-layout {
@@ -1379,14 +1394,13 @@ button, input, select, textarea {
   }
 
   /* 6. Dashboard Grid Stack */
-  .dashboard-grid {
-    grid-template-columns: 1fr !important;
-    gap: 16px;
-  }
-  
+  .dashboard-grid,
+  .dashboard-split-layout,
+  .upload-split-layout,
+  .stat-grid,
   .stats-grid {
     grid-template-columns: 1fr !important;
-    gap: 12px;
+    gap: 16px;
   }
 
   /* 7. Card Grids Stack */

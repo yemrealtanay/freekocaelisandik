@@ -107,7 +107,7 @@ export default function UploadPage({ onUploadStart }) {
       {errorMsg && <div className="toast-msg error">{errorMsg}</div>}
       {successMsg && <div className="toast-msg success">{successMsg}</div>}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px', alignItems: 'start' }}>
+      <div className="upload-split-layout">
         
         {/* Upload Form */}
         <div className="table-container" style={{ padding: '32px' }}>

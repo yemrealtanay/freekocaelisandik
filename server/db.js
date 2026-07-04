@@ -85,6 +85,17 @@ async function getDb() {
       error TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS audit_logs (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      user_email TEXT NOT NULL,
+      user_name TEXT NOT NULL,
+      action_type TEXT NOT NULL,
+      details TEXT NOT NULL,
+      ip_address TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 
   // Check if search_index column exists in members table, if not add it (Automatic migration)
