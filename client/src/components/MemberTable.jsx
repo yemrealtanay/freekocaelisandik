@@ -18,10 +18,16 @@ export function formatPhone(phone) {
 export function getRoleLabel(role) {
   switch (role) {
     case 'GOREVSIZ': return 'Görevsiz';
+    case 'ASIL_UYE': return 'Asil Üye';
+    case 'YEDEK_UYE': return 'Yedek Üye';
     case 'MUSAHIT': return 'Müşahit';
-    case 'SANDIK_GOREVLISI': return 'Sandık Görevlisi';
-    case 'SANDIK_SORUMLUSU': return 'Sandık Sorumlusu';
-    case 'YEDEK': return 'Yedek';
+    case 'YEDEK_MUSAHIT': return 'Yedek Müşahit';
+    case 'OKUL_SORUMLUSU': return 'Okul Sorumlusu';
+    case 'OKUL_YARDIMCISI': return 'Okul Sorumlu Yardımcısı';
+    case 'AVUKAT': return 'Avukat';
+    case 'KURYE': return 'Kurye';
+    case 'BILISIM': return 'Bilişim Sorumlusu';
+    case 'BOLGE_MAHALLE': return 'Bölge/Mahalle Sorumlusu';
     default: return role;
   }
 }
@@ -42,7 +48,8 @@ export default function MemberTable({ members, onSelectMember, onRoleChange }) {
           <tr>
             <th>Ad Soyad</th>
             <th>Telefon</th>
-            <th>Adres / Sandık Bilgisi</th>
+            <th>Sandık Alanı</th>
+            <th>Sandık No</th>
             <th>Rol</th>
             <th>Son İşlem</th>
             <th></th>
@@ -50,10 +57,6 @@ export default function MemberTable({ members, onSelectMember, onRoleChange }) {
         </thead>
         <tbody>
           {members.map((member) => {
-            const address = member.school 
-              ? `${member.school}${member.ballot_no ? ` (Sandık: ${member.ballot_no})` : ''}` 
-              : `${member.district}`;
-            
             return (
               <tr key={member.id}>
                 <td>
@@ -77,8 +80,13 @@ export default function MemberTable({ members, onSelectMember, onRoleChange }) {
                 <td>
                   <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: 'var(--text-main)' }}>
                     <Home size={12} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
-                    <span style={{ fontSize: '13px' }}>{address}</span>
+                    <span style={{ fontSize: '13px' }}>{member.school || '—'}</span>
                   </div>
+                </td>
+                <td>
+                  <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
+                    {member.ballot_no || '—'}
+                  </span>
                 </td>
                 <td>
                   <select
@@ -100,10 +108,16 @@ export default function MemberTable({ members, onSelectMember, onRoleChange }) {
                     }}
                   >
                     <option value="GOREVSIZ" style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-main)' }}>Görevsiz</option>
-                    <option value="SANDIK_GOREVLISI" style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-main)' }}>Sandık Görevlisi</option>
-                    <option value="SANDIK_SORUMLUSU" style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-main)' }}>Sandık Sorumlusu</option>
+                    <option value="ASIL_UYE" style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-main)' }}>Asil Üye</option>
+                    <option value="YEDEK_UYE" style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-main)' }}>Yedek Üye</option>
                     <option value="MUSAHIT" style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-main)' }}>Müşahit</option>
-                    <option value="YEDEK" style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-main)' }}>Yedek</option>
+                    <option value="YEDEK_MUSAHIT" style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-main)' }}>Yedek Müşahit</option>
+                    <option value="OKUL_SORUMLUSU" style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-main)' }}>Okul Sorumlusu</option>
+                    <option value="OKUL_YARDIMCISI" style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-main)' }}>Okul Sorumlu Yardımcısı</option>
+                    <option value="AVUKAT" style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-main)' }}>Avukat</option>
+                    <option value="KURYE" style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-main)' }}>Kurye</option>
+                    <option value="BILISIM" style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-main)' }}>Bilişim Sorumlusu</option>
+                    <option value="BOLGE_MAHALLE" style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-main)' }}>Bölge/Mahalle Sorumlusu</option>
                   </select>
                 </td>
                 <td style={{ color: 'var(--text-muted)', fontSize: '13px' }}>

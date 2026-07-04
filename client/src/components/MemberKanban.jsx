@@ -4,10 +4,16 @@ import { Phone, Calendar, ArrowRight } from 'lucide-react';
 
 const COLUMNS = [
   { id: 'GOREVSIZ', label: 'Görevsiz', class: 'GOREVSIZ' },
-  { id: 'SANDIK_GOREVLISI', label: 'Sandık Görevlisi', class: 'SANDIK_GOREVLISI' },
-  { id: 'SANDIK_SORUMLUSU', label: 'Sandık Sorumlusu', class: 'SANDIK_SORUMLUSU' },
+  { id: 'ASIL_UYE', label: 'Asil Üye', class: 'ASIL_UYE' },
+  { id: 'YEDEK_UYE', label: 'Yedek Üye', class: 'YEDEK_UYE' },
   { id: 'MUSAHIT', label: 'Müşahit', class: 'MUSAHIT' },
-  { id: 'YEDEK', label: 'Yedek', class: 'YEDEK' }
+  { id: 'YEDEK_MUSAHIT', label: 'Yedek Müşahit', class: 'YEDEK_MUSAHIT' },
+  { id: 'OKUL_SORUMLUSU', label: 'Okul Sorumlusu', class: 'OKUL_SORUMLUSU' },
+  { id: 'OKUL_YARDIMCISI', label: 'Okul Sorumlu Yrd.', class: 'OKUL_YARDIMCISI' },
+  { id: 'AVUKAT', label: 'Avukat', class: 'AVUKAT' },
+  { id: 'KURYE', label: 'Kurye', class: 'KURYE' },
+  { id: 'BILISIM', label: 'Bilişim Sorumlusu', class: 'BILISIM' },
+  { id: 'BOLGE_MAHALLE', label: 'Bölge/Mahalle Sorumlusu', class: 'BOLGE_MAHALLE' }
 ];
 
 export default function MemberKanban({ members, onSelectMember, onRoleChange }) {

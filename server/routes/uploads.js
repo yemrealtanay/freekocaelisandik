@@ -7,6 +7,34 @@ const XLSX = require('xlsx');
 const { getDb } = require('../db');
 const { requireAdmin } = require('../auth');
 
+function normalizeText(text) {
+  if (!text) return '';
+  return text
+    .toString()
+    .toLowerCase()
+    .replace(/ı/g, 'i')
+    .replace(/ş/g, 's')
+    .replace(/ğ/g, 'g')
+    .replace(/ç/g, 'c')
+    .replace(/ö/g, 'o')
+    .replace(/ü/g, 'u')
+    .replace(/i̇/g, 'i')
+    .replace(/\s+/g, '');
+}
+
+function buildSearchIndex(member) {
+  const parts = [
+    member.first_name,
+    member.last_name,
+    member.phone,
+    member.tckn,
+    member.school,
+    member.ballot_no,
+    member.district
+  ];
+  return parts.map(normalizeText).join('|');
+}
+
 // Configure multer
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -154,46 +182,48 @@ async function processExcelInBackground(uploadId, filePath, district, userId) {
       }
 
       try {
-        // Upsert Member logic:
-        // Try to find matching member by TCKN (if provided) or (firstName, lastName, phone)
+        // Duplicate Check Logic:
+        // Try to find matching member by first_name, last_name and tckn (if provided)
+        // Or if tckn is empty, match by first_name, last_name and phone
         let existingMember = null;
         if (tckn) {
-          existingMember = await db.get('SELECT * FROM members WHERE tckn = ? AND district = ?', [tckn, district]);
-        }
-        
-        if (!existingMember && normalizedPhone) {
           existingMember = await db.get(
-            'SELECT * FROM members WHERE first_name = ? AND last_name = ? AND phone LIKE ? AND district = ?',
-            [firstName, lastName, '%' + normalizedPhone, district]
+            'SELECT id FROM members WHERE first_name = ? AND last_name = ? AND tckn = ? AND district = ?',
+            [firstName, lastName, tckn, district]
           );
-        }
-
-        let memberId;
-
-        if (existingMember) {
-          memberId = existingMember.id;
-          // Update details
-          await db.run(
-            `UPDATE members 
-             SET tckn = ?, phone = ?, province = ?, school = ?, ballot_no = ?, updated_at = CURRENT_TIMESTAMP
-             WHERE id = ?`,
-            [
-              tckn || existingMember.tckn,
-              normalizedPhone || existingMember.phone,
-              province,
-              school || existingMember.school,
-              ballotNo || existingMember.ballot_no,
-              memberId
-            ]
+        } else if (normalizedPhone) {
+          existingMember = await db.get(
+            'SELECT id FROM members WHERE first_name = ? AND last_name = ? AND phone = ? AND district = ?',
+            [firstName, lastName, normalizedPhone, district]
           );
         } else {
-          memberId = 'member-' + Math.random().toString(36).substr(2, 9);
-          await db.run(
-            `INSERT INTO members (id, tckn, first_name, last_name, phone, province, district, school, ballot_no, role)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'GOREVSIZ')`,
-            [memberId, tckn, firstName, lastName, normalizedPhone, province, district, school, ballotNo]
+          existingMember = await db.get(
+            'SELECT id FROM members WHERE first_name = ? AND last_name = ? AND district = ?',
+            [firstName, lastName, district]
           );
         }
+
+        if (existingMember) {
+          // Skip duplicate member row
+          continue;
+        }
+
+        // Member doesn't exist, insert new
+        const memberId = 'member-' + Math.random().toString(36).substr(2, 9);
+        const searchIndex = buildSearchIndex({
+          first_name: firstName,
+          last_name: lastName,
+          phone: normalizedPhone,
+          tckn,
+          school,
+          ballot_no: ballotNo,
+          district
+        });
+        await db.run(
+          `INSERT INTO members (id, tckn, first_name, last_name, phone, province, district, school, ballot_no, role, search_index)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'GOREVSIZ', ?)`,
+          [memberId, tckn, firstName, lastName, normalizedPhone, province, district, school, ballotNo, searchIndex]
+        );
 
         // Add note/activity if Aciklama is present
         if (aciklama) {

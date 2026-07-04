@@ -540,28 +540,64 @@ button, input, select, textarea {
   color: var(--role-gorevsiz-text);
 }
 
+.role-badge.ASIL_UYE {
+  border-color: var(--role-gorevli-border);
+  background-color: var(--role-gorevli-bg);
+  color: var(--role-gorevli-text);
+}
+
+.role-badge.YEDEK_UYE {
+  border-color: var(--role-yedek-border);
+  background-color: var(--role-yedek-bg);
+  color: var(--role-yedek-text);
+}
+
 .role-badge.MUSAHIT {
   border-color: var(--role-musahit-border);
   background-color: var(--role-musahit-bg);
   color: var(--role-musahit-text);
 }
 
-.role-badge.SANDIK_GOREVLISI {
-  border-color: var(--role-gorevli-border);
-  background-color: var(--role-gorevli-bg);
-  color: var(--role-gorevli-text);
+.role-badge.YEDEK_MUSAHIT {
+  border-color: #059669;
+  background-color: rgba(5, 150, 105, 0.1);
+  color: #34d399;
 }
 
-.role-badge.SANDIK_SORUMLUSU {
+.role-badge.OKUL_SORUMLUSU {
   border-color: var(--role-sorumlu-border);
   background-color: var(--role-sorumlu-bg);
   color: var(--role-sorumlu-text);
 }
 
-.role-badge.YEDEK {
-  border-color: var(--role-yedek-border);
-  background-color: var(--role-yedek-bg);
-  color: var(--role-yedek-text);
+.role-badge.OKUL_YARDIMCISI {
+  border-color: #7c3aed;
+  background-color: rgba(124, 58, 237, 0.1);
+  color: #c084fc;
+}
+
+.role-badge.AVUKAT {
+  border-color: #e11d48;
+  background-color: rgba(225, 29, 72, 0.1);
+  color: #fb7185;
+}
+
+.role-badge.KURYE {
+  border-color: #d97706;
+  background-color: rgba(217, 119, 6, 0.1);
+  color: #fbbf24;
+}
+
+.role-badge.BILISIM {
+  border-color: #0891b2;
+  background-color: rgba(8, 145, 178, 0.1);
+  color: #22d3ee;
+}
+
+.role-badge.BOLGE_MAHALLE {
+  border-color: #db2777;
+  background-color: rgba(219, 39, 119, 0.1);
+  color: #f472b6;
 }
 
 /* Table Style */
@@ -627,8 +663,14 @@ button, input, select, textarea {
 
 .member-note-preview {
   font-size: 12px;
-  color: var(--text-muted);
-  font-style: italic;
+  color: #cbd5e1;
+  font-weight: 500;
+  background-color: rgba(255, 255, 255, 0.03);
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  width: fit-content;
+  border-left: 2px solid var(--primary);
+  margin-top: 4px;
 }
 
 .detail-link {
@@ -742,12 +784,13 @@ button, input, select, textarea {
 
 /* Kanban Styling */
 .kanban-board {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(220px, 1fr));
+  display: flex;
   gap: 16px;
   height: calc(100vh - 220px);
   overflow-y: hidden;
+  overflow-x: auto;
   align-items: stretch;
+  padding-bottom: 12px;
 }
 
 .kanban-column {
@@ -758,6 +801,7 @@ button, input, select, textarea {
   flex-direction: column;
   height: 100%;
   overflow: hidden;
+  flex: 0 0 280px;
 }
 
 .kanban-column-header {

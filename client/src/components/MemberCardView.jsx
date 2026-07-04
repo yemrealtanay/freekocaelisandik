@@ -39,10 +39,16 @@ export default function MemberCardView({ members, onSelectMember, onRoleChange }
               }}
             >
               <option value="GOREVSIZ" style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-main)' }}>Görevsiz</option>
-              <option value="SANDIK_GOREVLISI" style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-main)' }}>Sandık Görevlisi</option>
-              <option value="SANDIK_SORUMLUSU" style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-main)' }}>Sandık Sorumlusu</option>
+              <option value="ASIL_UYE" style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-main)' }}>Asil Üye</option>
+              <option value="YEDEK_UYE" style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-main)' }}>Yedek Üye</option>
               <option value="MUSAHIT" style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-main)' }}>Müşahit</option>
-              <option value="YEDEK" style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-main)' }}>Yedek</option>
+              <option value="YEDEK_MUSAHIT" style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-main)' }}>Yedek Müşahit</option>
+              <option value="OKUL_SORUMLUSU" style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-main)' }}>Okul Sorumlusu</option>
+              <option value="OKUL_YARDIMCISI" style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-main)' }}>Okul Sorumlu Yardımcısı</option>
+              <option value="AVUKAT" style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-main)' }}>Avukat</option>
+              <option value="KURYE" style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-main)' }}>Kurye</option>
+              <option value="BILISIM" style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-main)' }}>Bilişim Sorumlusu</option>
+              <option value="BOLGE_MAHALLE" style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-main)' }}>Bölge/Mahalle Sorumlusu</option>
             </select>
           </div>
 

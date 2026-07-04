@@ -53,7 +53,8 @@ async function getDb() {
       district TEXT NOT NULL,
       school TEXT,
       ballot_no TEXT,
-      role TEXT NOT NULL CHECK(role IN ('GOREVSIZ', 'SANDIK_GOREVLISI', 'SANDIK_SORUMLUSU', 'MUSAHIT', 'YEDEK')) DEFAULT 'GOREVSIZ',
+      role TEXT NOT NULL DEFAULT 'GOREVSIZ',
+      search_index TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
@@ -85,6 +86,48 @@ async function getDb() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
   `);
+
+  // Check if search_index column exists in members table, if not add it (Automatic migration)
+  const columns = await db.all('PRAGMA table_info(members)');
+  const hasSearchIndex = columns.some(c => c.name === 'search_index');
+  if (!hasSearchIndex) {
+    console.log('Migrating: Adding search_index column to members table...');
+    await db.run('ALTER TABLE members ADD COLUMN search_index TEXT');
+    
+    // Re-build search index for existing members
+    const membersList = await db.all('SELECT * FROM members');
+    console.log(`Migrating: Rebuilding search_index for ${membersList.length} members...`);
+    
+    const normalizeText = (text) => {
+      if (!text) return '';
+      return text
+        .toString()
+        .toLowerCase()
+        .replace(/ı/g, 'i')
+        .replace(/ş/g, 's')
+        .replace(/ğ/g, 'g')
+        .replace(/ç/g, 'c')
+        .replace(/ö/g, 'o')
+        .replace(/ü/g, 'u')
+        .replace(/i̇/g, 'i')
+        .replace(/\s+/g, '');
+    };
+
+    for (const member of membersList) {
+      const parts = [
+        member.first_name,
+        member.last_name,
+        member.phone,
+        member.tckn,
+        member.school,
+        member.ballot_no,
+        member.district
+      ];
+      const searchIndex = parts.map(normalizeText).join('|');
+      await db.run('UPDATE members SET search_index = ? WHERE id = ?', [searchIndex, member.id]);
+    }
+    console.log('Migration completed successfully.');
+  }
 
   // Seed default admin user if not exists
   const adminExists = await db.get('SELECT * FROM users WHERE email = ?', ['admin@kocaeli-org.local']);

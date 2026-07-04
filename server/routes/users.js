@@ -113,10 +113,16 @@ router.get('/dashboard-stats', requireAdmin, async (req, res) => {
     const roleStats = await db.all('SELECT role, COUNT(*) as count FROM members GROUP BY role');
     const roleBreakdown = {
       GOREVSIZ: 0,
-      SANDIK_GOREVLISI: 0,
-      SANDIK_SORUMLUSU: 0,
+      ASIL_UYE: 0,
+      YEDEK_UYE: 0,
       MUSAHIT: 0,
-      YEDEK: 0
+      YEDEK_MUSAHIT: 0,
+      OKUL_SORUMLUSU: 0,
+      OKUL_YARDIMCISI: 0,
+      AVUKAT: 0,
+      KURYE: 0,
+      BILISIM: 0,
+      BOLGE_MAHALLE: 0
     };
     roleStats.forEach(r => {
       roleBreakdown[r.role] = r.count;

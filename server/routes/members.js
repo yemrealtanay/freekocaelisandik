@@ -3,6 +3,34 @@ const router = express.Router();
 const { getDb } = require('../db');
 const { requireAuth } = require('../auth');
 
+function normalizeText(text) {
+  if (!text) return '';
+  return text
+    .toString()
+    .toLowerCase()
+    .replace(/ı/g, 'i')
+    .replace(/ş/g, 's')
+    .replace(/ğ/g, 'g')
+    .replace(/ç/g, 'c')
+    .replace(/ö/g, 'o')
+    .replace(/ü/g, 'u')
+    .replace(/i̇/g, 'i')
+    .replace(/\s+/g, '');
+}
+
+function buildSearchIndex(member) {
+  const parts = [
+    member.first_name,
+    member.last_name,
+    member.phone,
+    member.tckn,
+    member.school,
+    member.ballot_no,
+    member.district
+  ];
+  return parts.map(normalizeText).join('|');
+}
+
 // Helper to check if user has access to a district
 function checkDistrictAccess(user, district) {
   if (user.role === 'ADMIN') return true;
@@ -40,29 +68,9 @@ router.get('/', requireAuth, async (req, res) => {
     }
 
     if (search) {
-      const cleanSearch = search.trim().toLowerCase();
-      const searchPattern = `%${cleanSearch}%`;
-      const spaceStrippedSearch = `%${cleanSearch.replace(/\s+/g, '')}%`;
-
-      query += ` AND (
-        LOWER(m.first_name) LIKE ? 
-        OR LOWER(m.last_name) LIKE ? 
-        OR LOWER(m.first_name || ' ' || m.last_name) LIKE ? 
-        OR m.phone LIKE ? 
-        OR m.ballot_no LIKE ? 
-        OR LOWER(REPLACE(m.school, ' ', '')) LIKE ? 
-        OR LOWER(REPLACE(m.district, ' ', '')) LIKE ?
-      )`;
-      
-      params.push(
-        searchPattern,       // first_name
-        searchPattern,       // last_name
-        searchPattern,       // fullname
-        searchPattern,       // phone
-        searchPattern,       // ballot_no
-        spaceStrippedSearch, // school (space/case insensitive)
-        spaceStrippedSearch  // district (space/case insensitive)
-      );
+      const cleanSearch = normalizeText(search);
+      query += ' AND m.search_index LIKE ?';
+      params.push(`%${cleanSearch}%`);
     }
 
     query += ' ORDER BY m.first_name ASC, m.last_name ASC';
@@ -105,9 +113,19 @@ router.post('/', requireAuth, async (req, res) => {
     const db = await getDb();
     const memberId = 'member-' + Math.random().toString(36).substr(2, 9);
     
+    const searchIndex = buildSearchIndex({
+      first_name: first_name.toUpperCase(),
+      last_name: last_name.toUpperCase(),
+      phone: phone || '',
+      tckn: tckn || '',
+      school: school || '',
+      ballot_no: ballot_no || '',
+      district
+    });
+
     await db.run(
-      `INSERT INTO members (id, tckn, first_name, last_name, phone, province, district, school, ballot_no, role)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO members (id, tckn, first_name, last_name, phone, province, district, school, ballot_no, role, search_index)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         memberId,
         tckn || '',
@@ -118,7 +136,8 @@ router.post('/', requireAuth, async (req, res) => {
         district,
         school || '',
         ballot_no || '',
-        role || 'GOREVSIZ'
+        role || 'GOREVSIZ',
+        searchIndex
       ]
     );
 
@@ -163,19 +182,37 @@ router.put('/:id', requireAuth, async (req, res) => {
       roleChangeNote = `Görev durumu güncellendi: ${member.role} -> ${role}`;
     }
 
+    const newTckn = tckn !== undefined ? tckn : member.tckn;
+    const newFirstName = first_name ? first_name.toUpperCase() : member.first_name;
+    const newLastName = last_name ? last_name.toUpperCase() : member.last_name;
+    const newPhone = phone !== undefined ? phone : member.phone;
+    const newSchool = school !== undefined ? school : member.school;
+    const newBallotNo = ballot_no !== undefined ? ballot_no : member.ballot_no;
+    
+    const searchIndex = buildSearchIndex({
+      first_name: newFirstName,
+      last_name: newLastName,
+      phone: newPhone,
+      tckn: newTckn,
+      school: newSchool,
+      ballot_no: newBallotNo,
+      district: member.district
+    });
+
     await db.run(
       `UPDATE members 
-       SET tckn = ?, first_name = ?, last_name = ?, phone = ?, province = ?, school = ?, ballot_no = ?, role = ?, updated_at = CURRENT_TIMESTAMP
+       SET tckn = ?, first_name = ?, last_name = ?, phone = ?, province = ?, school = ?, ballot_no = ?, role = ?, search_index = ?, updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
       [
-        tckn !== undefined ? tckn : member.tckn,
-        first_name ? first_name.toUpperCase() : member.first_name,
-        last_name ? last_name.toUpperCase() : member.last_name,
-        phone !== undefined ? phone : member.phone,
+        newTckn,
+        newFirstName,
+        newLastName,
+        newPhone,
         province || member.province,
-        school !== undefined ? school : member.school,
-        ballot_no !== undefined ? ballot_no : member.ballot_no,
+        newSchool,
+        newBallotNo,
         role || member.role,
+        searchIndex,
         id
       ]
     );

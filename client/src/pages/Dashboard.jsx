@@ -35,11 +35,7 @@ export default function Dashboard() {
 
   if (!stats) return null;
 
-  const totalAssigned = 
-    (stats.roleBreakdown.SANDIK_GOREVLISI || 0) +
-    (stats.roleBreakdown.SANDIK_SORUMLUSU || 0) +
-    (stats.roleBreakdown.MUSAHIT || 0) +
-    (stats.roleBreakdown.YEDEK || 0);
+  const totalAssigned = stats.totalMembers - (stats.roleBreakdown.GOREVSIZ || 0);
 
   const assignmentRate = stats.totalMembers > 0 
     ? Math.round((totalAssigned / stats.totalMembers) * 100) 

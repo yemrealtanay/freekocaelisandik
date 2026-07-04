@@ -14,10 +14,16 @@ const PREDEFINED_DISTRICTS = [
 
 const ROLES = [
   { id: 'TUM', label: 'Tümü' },
-  { id: 'SANDIK_GOREVLISI', label: 'Sandık Görevlisi' },
-  { id: 'SANDIK_SORUMLUSU', label: 'Sandık Sorumlusu' },
+  { id: 'ASIL_UYE', label: 'Asil Üye' },
+  { id: 'YEDEK_UYE', label: 'Yedek Üye' },
   { id: 'MUSAHIT', label: 'Müşahit' },
-  { id: 'YEDEK', label: 'Yedek' },
+  { id: 'YEDEK_MUSAHIT', label: 'Yedek Müşahit' },
+  { id: 'OKUL_SORUMLUSU', label: 'Okul Sorumlusu' },
+  { id: 'OKUL_YARDIMCISI', label: 'Okul Sorumlu Yardımcısı' },
+  { id: 'AVUKAT', label: 'Avukat' },
+  { id: 'KURYE', label: 'Kurye' },
+  { id: 'BILISIM', label: 'Bilişim Sorumlusu' },
+  { id: 'BOLGE_MAHALLE', label: 'Bölge/Mahalle Sorumlusu' },
   { id: 'GOREVSIZ', label: 'Görevsiz' }
 ];
 
@@ -378,10 +384,16 @@ export default function MembersPage({ currentUser }) {
                     onChange={(e) => setRole(e.target.value)}
                   >
                     <option value="GOREVSIZ">Görevsiz</option>
-                    <option value="SANDIK_GOREVLISI">Sandık Görevlisi</option>
-                    <option value="SANDIK_SORUMLUSU">Sandık Sorumlusu</option>
+                    <option value="ASIL_UYE">Asil Üye</option>
+                    <option value="YEDEK_UYE">Yedek Üye</option>
                     <option value="MUSAHIT">Müşahit</option>
-                    <option value="YEDEK">Yedek</option>
+                    <option value="YEDEK_MUSAHIT">Yedek Müşahit</option>
+                    <option value="OKUL_SORUMLUSU">Okul Sorumlusu</option>
+                    <option value="OKUL_YARDIMCISI">Okul Sorumlu Yardımcısı</option>
+                    <option value="AVUKAT">Avukat</option>
+                    <option value="KURYE">Kurye</option>
+                    <option value="BILISIM">Bilişim Sorumlusu</option>
+                    <option value="BOLGE_MAHALLE">Bölge/Mahalle Sorumlusu</option>
                   </select>
                 </div>
 

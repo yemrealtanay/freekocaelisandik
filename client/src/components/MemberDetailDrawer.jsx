@@ -273,10 +273,16 @@ export default function MemberDetailDrawer({ member, onClose, onUpdateSuccess })
                   onChange={(e) => setRole(e.target.value)}
                 >
                   <option value="GOREVSIZ">Görevsiz</option>
-                  <option value="SANDIK_GOREVLISI">Sandık Görevlisi</option>
-                  <option value="SANDIK_SORUMLUSU">Sandık Sorumlusu</option>
+                  <option value="ASIL_UYE">Asil Üye</option>
+                  <option value="YEDEK_UYE">Yedek Üye</option>
                   <option value="MUSAHIT">Müşahit</option>
-                  <option value="YEDEK">Yedek</option>
+                  <option value="YEDEK_MUSAHIT">Yedek Müşahit</option>
+                  <option value="OKUL_SORUMLUSU">Okul Sorumlusu</option>
+                  <option value="OKUL_YARDIMCISI">Okul Sorumlu Yardımcısı</option>
+                  <option value="AVUKAT">Avukat</option>
+                  <option value="KURYE">Kurye</option>
+                  <option value="BILISIM">Bilişim Sorumlusu</option>
+                  <option value="BOLGE_MAHALLE">Bölge/Mahalle Sorumlusu</option>
                 </select>
               </div>
 
