@@ -18,6 +18,9 @@ export default function App() {
   
   // Active background upload ID tracker
   const [activeUploadId, setActiveUploadId] = useState(null);
+  
+  // Mobile sidebar visibility state
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   // Check auth state on mount
   useEffect(() => {
@@ -86,12 +89,24 @@ export default function App() {
     <div className={`app-layout ${!isAdmin ? 'no-sidebar' : ''}`}>
       {/* Sidebar - Admin only */}
       {isAdmin && (
-        <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
+        <Sidebar 
+          activeTab={activeTab} 
+          onTabChange={(tab) => {
+            setActiveTab(tab);
+            setMobileSidebarOpen(false);
+          }} 
+          isOpen={mobileSidebarOpen}
+          onClose={() => setMobileSidebarOpen(false)}
+        />
       )}
 
       {/* Main Container */}
       <div className="main-content">
-        <Header user={currentUser} onLogout={handleLogout} />
+        <Header 
+          user={currentUser} 
+          onLogout={handleLogout} 
+          onToggleSidebar={() => setMobileSidebarOpen(!mobileSidebarOpen)} 
+        />
         
         {/* Render active tabs/screens */}
         {isAdmin ? (

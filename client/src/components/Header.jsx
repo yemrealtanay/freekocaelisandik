@@ -1,11 +1,29 @@
 import React from 'react';
-import { LogOut, MapPin, User } from 'lucide-react';
+import { LogOut, MapPin, User, Menu } from 'lucide-react';
 
-export default function Header({ user, onLogout }) {
+export default function Header({ user, onLogout, onToggleSidebar }) {
   if (!user) return null;
 
   return (
     <header className="header">
+      {/* Mobile sidebar toggle button */}
+      <button 
+        className="sidebar-toggle-btn" 
+        onClick={onToggleSidebar}
+        style={{
+          background: 'none',
+          border: 'none',
+          color: 'var(--text-main)',
+          cursor: 'pointer',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '8px',
+          marginRight: '12px'
+        }}
+      >
+        <Menu size={20} />
+      </button>
+
       {/* Fallback header title if sidebar is not active */}
       <div className="header-title-fallback">
         <span className="logo-badge">I</span>
