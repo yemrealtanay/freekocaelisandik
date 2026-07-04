@@ -104,7 +104,8 @@ export const api = {
         throw new Error('Veritabanı yedeği indirilemedi.');
       }
       return response.blob();
-    }
+    },
+    getAuditLogs: () => request('/api/users/audit-logs')
   },
   members: {
     list: (params = {}) => {

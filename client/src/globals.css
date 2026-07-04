@@ -600,6 +600,15 @@ button, input, select, textarea {
   color: #f472b6;
 }
 
+/* Action Log Badge Colors */
+.role-badge.MEMBER_CREATE { border-color: #3b82f6; background-color: rgba(59, 130, 246, 0.1); color: #60a5fa; }
+.role-badge.MEMBER_UPDATE { border-color: #f59e0b; background-color: rgba(245, 158, 11, 0.1); color: #fbbf24; }
+.role-badge.MEMBER_DELETE { border-color: #ef4444; background-color: rgba(239, 68, 68, 0.1); color: #fca5a5; }
+.role-badge.EXCEL_UPLOAD { border-color: #10b981; background-color: rgba(16, 185, 129, 0.1); color: #34d399; }
+.role-badge.USER_CREATE { border-color: #8b5cf6; background-color: rgba(139, 92, 246, 0.1); color: #a78bfa; }
+.role-badge.USER_STATUS_CHANGE { border-color: #6b7280; background-color: rgba(107, 114, 128, 0.1); color: #9ca3af; }
+.role-badge.USER_DELETE { border-color: #ef4444; background-color: rgba(239, 68, 68, 0.1); color: #fca5a5; }
+
 /* Table Style */
 .table-container {
   background-color: var(--bg-surface);

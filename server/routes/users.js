@@ -3,6 +3,7 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const { getDb } = require('../db');
 const { requireAdmin } = require('../auth');
+const { logAction } = require('../logger');
 
 // GET /api/users (List users, Admin only)
 router.get('/', requireAdmin, async (req, res) => {
@@ -41,6 +42,8 @@ router.post('/', requireAdmin, async (req, res) => {
       [userId, name, email, passwordHash, userDistrict, role, 'ACTIVE']
     );
 
+    await logAction(req, 'USER_CREATE', `${name} (${email}) isimli kullanıcı oluşturuldu. Rol: ${role}, Sorumlu İlçe: ${userDistrict || 'Hepsi'}`);
+
     res.status(201).json({
       message: 'Kullanıcı başarıyla oluşturuldu.',
       user: { id: userId, name, email, district: userDistrict, role, status: 'ACTIVE' }
@@ -66,10 +69,16 @@ router.patch('/:id/status', requireAdmin, async (req, res) => {
 
   try {
     const db = await getDb();
+    const targetUser = await db.get('SELECT name, email FROM users WHERE id = ?', [id]);
     const result = await db.run('UPDATE users SET status = ? WHERE id = ?', [status, id]);
     if (result.changes === 0) {
       return res.status(404).json({ message: 'Kullanıcı bulunamadı.' });
     }
+    
+    if (targetUser) {
+      await logAction(req, 'USER_STATUS_CHANGE', `${targetUser.name} (${targetUser.email}) kullanıcısının durumu ${status === 'ACTIVE' ? 'Aktif' : 'Pasif'} yapıldı.`);
+    }
+
     res.json({ message: 'Kullanıcı durumu güncellendi.', status });
   } catch (error) {
     console.error('Update status error:', error);
@@ -87,10 +96,16 @@ router.delete('/:id', requireAdmin, async (req, res) => {
 
   try {
     const db = await getDb();
+    const targetUser = await db.get('SELECT name, email FROM users WHERE id = ?', [id]);
     const result = await db.run('DELETE FROM users WHERE id = ?', [id]);
     if (result.changes === 0) {
       return res.status(404).json({ message: 'Kullanıcı bulunamadı.' });
     }
+
+    if (targetUser) {
+      await logAction(req, 'USER_DELETE', `${targetUser.name} (${targetUser.email}) kullanıcısı sistemden silindi.`);
+    }
+
     res.json({ message: 'Kullanıcı başarıyla silindi.' });
   } catch (error) {
     console.error('Delete user error:', error);
@@ -188,6 +203,18 @@ router.get('/download-db', requireAdmin, async (req, res) => {
     res.download(dbPath, `sandik_yedek_${new Date().toISOString().split('T')[0]}.sqlite`);
   } else {
     res.status(404).json({ message: 'Veritabanı dosyası bulunamadı.' });
+  }
+});
+
+// GET /api/users/audit-logs (Get action logs, Admin only)
+router.get('/audit-logs', requireAdmin, async (req, res) => {
+  try {
+    const db = await getDb();
+    const logs = await db.all('SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 500');
+    res.json(logs);
+  } catch (err) {
+    console.error('Audit logs error:', err);
+    res.status(500).json({ message: 'İşlem logları çekilemedi.' });
   }
 });
 

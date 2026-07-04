@@ -13,6 +13,11 @@ export default function UsersList({ currentUser }) {
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   
+  // Mobile/Sub-tab state
+  const [activeSubTab, setActiveSubTab] = useState('users');
+  const [logs, setLogs] = useState([]);
+  const [loadingLogs, setLoadingLogs] = useState(false);
+  
   // Modal states
   const [modalOpen, setModalOpen] = useState(false);
   const [name, setName] = useState('');
@@ -23,8 +28,12 @@ export default function UsersList({ currentUser }) {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    fetchUsers();
-  }, []);
+    if (activeSubTab === 'users') {
+      fetchUsers();
+    } else {
+      fetchLogs();
+    }
+  }, [activeSubTab]);
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -36,6 +45,39 @@ export default function UsersList({ currentUser }) {
       setErrorMsg('Kullanıcılar yüklenemedi.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchLogs = async () => {
+    setLoadingLogs(true);
+    setErrorMsg('');
+    try {
+      const data = await api.users.getAuditLogs();
+      setLogs(data);
+    } catch (err) {
+      console.error(err);
+      setErrorMsg('İşlem logları yüklenemedi.');
+    } finally {
+      setLoadingLogs(false);
+    }
+  };
+
+  const formatDateTime = (isoString) => {
+    if (!isoString) return '—';
+    const date = new Date(isoString);
+    return date.toLocaleString('tr-TR');
+  };
+
+  const getActionTypeLabel = (type) => {
+    switch (type) {
+      case 'MEMBER_CREATE': return 'Üye Ekleme';
+      case 'MEMBER_UPDATE': return 'Üye Güncelleme';
+      case 'MEMBER_DELETE': return 'Üye Silme';
+      case 'EXCEL_UPLOAD': return 'Excel Yükleme';
+      case 'USER_CREATE': return 'Kullanıcı Ekleme';
+      case 'USER_STATUS_CHANGE': return 'Kullanıcı Durumu';
+      case 'USER_DELETE': return 'Kullanıcı Silme';
+      default: return type;
     }
   };
 
@@ -117,103 +159,170 @@ export default function UsersList({ currentUser }) {
     <div className="page-container">
       <div className="page-header">
         <div className="page-title-area">
-          <h2 className="page-title">Kullanıcılar</h2>
-          <span className="page-subtitle">İlçe sorumluları ve yöneticiler</span>
+          <h2 className="page-title">{activeSubTab === 'users' ? 'Kullanıcılar' : 'İşlem Günlükleri'}</h2>
+          <span className="page-subtitle">
+            {activeSubTab === 'users' 
+              ? 'İlçe sorumluları ve yöneticiler' 
+              : 'Sistem genelinde yapılan tüm kritik işlemlerin güvenlik kayıtları'}
+          </span>
         </div>
-        <button className="btn btn-primary" onClick={() => setModalOpen(true)}>
-          <Plus size={16} />
-          <span>Yeni Kullanıcı Ekle</span>
+        {activeSubTab === 'users' && (
+          <button className="btn btn-primary" onClick={() => setModalOpen(true)}>
+            <Plus size={16} />
+            <span>Yeni Kullanıcı Ekle</span>
+          </button>
+        )}
+      </div>
+
+      {/* Sub-tab Switcher */}
+      <div className="view-switcher" style={{ marginBottom: '24px', width: 'fit-content' }}>
+        <button 
+          className={`view-btn ${activeSubTab === 'users' ? 'active' : ''}`}
+          onClick={() => setActiveSubTab('users')}
+        >
+          Kullanıcı Yönetimi
+        </button>
+        <button 
+          className={`view-btn ${activeSubTab === 'logs' ? 'active' : ''}`}
+          onClick={() => setActiveSubTab('logs')}
+        >
+          İşlem Günlükleri (Audit)
         </button>
       </div>
 
       {errorMsg && <div className="toast-msg error">{errorMsg}</div>}
       {successMsg && <div className="toast-msg success">{successMsg}</div>}
 
-      {loading ? (
-        <div style={{ color: 'var(--text-muted)' }}>Yükleniyor...</div>
-      ) : (
-        <div className="table-container">
-          <table className="custom-table">
-            <thead>
-              <tr>
-                <th>Ad Soyad</th>
-                <th>Email</th>
-                <th>İlçe</th>
-                <th>Rol</th>
-                <th>Durum</th>
-                <th style={{ textAlign: 'right' }}>İşlemler</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((u) => (
-                <tr key={u.id}>
-                  <td style={{ fontWeight: 600 }}>{u.name} {u.id === currentUser.id && <span style={{ color: 'var(--text-dim)', fontSize: '11px', fontWeight: 'normal' }}>(Siz)</span>}</td>
-                  <td>{u.email}</td>
-                  <td>
-                    {u.role === 'ADMIN' ? (
-                      <span style={{ color: 'var(--text-dim)' }}>&mdash; (tüm ilçeler)</span>
-                    ) : (
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                        <MapPin size={12} style={{ color: 'var(--text-muted)' }} />
-                        {u.district}
-                      </span>
-                    )}
-                  </td>
-                  <td>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '13px' }}>
-                      {u.role === 'ADMIN' ? (
-                        <>
-                          <Shield size={12} style={{ color: 'var(--primary)' }} />
-                          Yönetici
-                        </>
-                      ) : (
-                        'Kullanıcı'
-                      )}
-                    </span>
-                  </td>
-                  <td>
-                    <span style={{ 
-                      color: u.status === 'ACTIVE' ? 'var(--success)' : 'var(--text-dim)', 
-                      fontWeight: 600,
-                      fontSize: '13px',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '4px'
-                    }}>
-                      <span style={{ 
-                        width: '6px', 
-                        height: '6px', 
-                        borderRadius: '50%', 
-                        backgroundColor: u.status === 'ACTIVE' ? 'var(--success)' : 'var(--text-dim)' 
-                      }} />
-                      {u.status === 'ACTIVE' ? 'Aktif' : 'Pasif'}
-                    </span>
-                  </td>
-                  <td style={{ textAlign: 'right' }}>
-                    <div style={{ display: 'inline-flex', gap: '8px', justifyContent: 'flex-end' }}>
-                      <button 
-                        className={`btn ${u.status === 'ACTIVE' ? 'btn-secondary' : 'btn-primary'}`}
-                        style={{ padding: '6px 12px', fontSize: '12px' }}
-                        onClick={() => handleToggleStatus(u)}
-                        disabled={u.id === currentUser.id}
-                      >
-                        {u.status === 'ACTIVE' ? 'Pasife Al' : 'Aktif Et'}
-                      </button>
-                      <button 
-                        className="btn btn-danger"
-                        style={{ padding: '6px', borderRadius: 'var(--radius-sm)' }}
-                        onClick={() => handleDeleteUser(u)}
-                        disabled={u.id === currentUser.id}
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </td>
+      {activeSubTab === 'users' ? (
+        loading ? (
+          <div style={{ color: 'var(--text-muted)' }}>Yükleniyor...</div>
+        ) : (
+          <div className="table-container">
+            <table className="custom-table">
+              <thead>
+                <tr>
+                  <th>Ad Soyad</th>
+                  <th>Email</th>
+                  <th>İlçe</th>
+                  <th>Rol</th>
+                  <th>Durum</th>
+                  <th style={{ textAlign: 'right' }}>İşlemler</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {users.map((u) => (
+                  <tr key={u.id}>
+                    <td style={{ fontWeight: 600 }}>{u.name} {u.id === currentUser.id && <span style={{ color: 'var(--text-dim)', fontSize: '11px', fontWeight: 'normal' }}>(Siz)</span>}</td>
+                    <td>{u.email}</td>
+                    <td>
+                      {u.role === 'ADMIN' ? (
+                        <span style={{ color: 'var(--text-dim)' }}>&mdash; (tüm ilçeler)</span>
+                      ) : (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          <MapPin size={12} style={{ color: 'var(--text-muted)' }} />
+                          {u.district}
+                        </span>
+                      )}
+                    </td>
+                    <td>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '13px' }}>
+                        {u.role === 'ADMIN' ? (
+                          <>
+                            <Shield size={12} style={{ color: 'var(--primary)' }} />
+                            Yönetici
+                          </>
+                        ) : (
+                          'Kullanıcı'
+                        )}
+                      </span>
+                    </td>
+                    <td>
+                      <span style={{ 
+                        color: u.status === 'ACTIVE' ? 'var(--success)' : 'var(--text-dim)', 
+                        fontWeight: 600,
+                        fontSize: '13px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}>
+                        <span style={{ 
+                          width: '6px', 
+                          height: '6px', 
+                          borderRadius: '50%', 
+                          backgroundColor: u.status === 'ACTIVE' ? 'var(--success)' : 'var(--text-dim)' 
+                        }} />
+                        {u.status === 'ACTIVE' ? 'Aktif' : 'Pasif'}
+                      </span>
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <div style={{ display: 'inline-flex', gap: '8px', justifyContent: 'flex-end' }}>
+                        <button 
+                          className={`btn ${u.status === 'ACTIVE' ? 'btn-secondary' : 'btn-primary'}`}
+                          style={{ padding: '6px 12px', fontSize: '12px' }}
+                          onClick={() => handleToggleStatus(u)}
+                          disabled={u.id === currentUser.id}
+                        >
+                          {u.status === 'ACTIVE' ? 'Pasife Al' : 'Aktif Et'}
+                        </button>
+                        <button 
+                          className="btn btn-danger"
+                          style={{ padding: '6px', borderRadius: 'var(--radius-sm)' }}
+                          onClick={() => handleDeleteUser(u)}
+                          disabled={u.id === currentUser.id}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
+      ) : (
+        loadingLogs ? (
+          <div style={{ color: 'var(--text-muted)' }}>Yükleniyor...</div>
+        ) : (
+          <div className="table-container">
+            <table className="custom-table">
+              <thead>
+                <tr>
+                  <th>Tarih</th>
+                  <th>Kullanıcı</th>
+                  <th>E-posta</th>
+                  <th>İşlem Türü</th>
+                  <th>Açıklama</th>
+                  <th>IP Adresi</th>
+                </tr>
+              </thead>
+              <tbody>
+                {logs.length === 0 ? (
+                  <tr>
+                    <td colSpan="6" style={{ textAlign: 'center', padding: '48px', color: 'var(--text-muted)' }}>
+                      İşlem kaydı bulunamadı.
+                    </td>
+                  </tr>
+                ) : (
+                  logs.map((log) => (
+                    <tr key={log.id}>
+                      <td style={{ whiteSpace: 'nowrap', fontSize: '13px' }}>{formatDateTime(log.created_at)}</td>
+                      <td style={{ fontWeight: 600 }}>{log.user_name}</td>
+                      <td>{log.user_email}</td>
+                      <td>
+                        <span className={`role-badge ${log.action_type}`}>
+                          {getActionTypeLabel(log.action_type)}
+                        </span>
+                      </td>
+                      <td style={{ color: 'var(--text-main)', fontSize: '13px', lineHeight: '1.4' }}>{log.details}</td>
+                      <td style={{ fontFamily: 'monospace', fontSize: '12px', color: 'var(--text-muted)' }}>{log.ip_address || '—'}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        )
       )}
 
       {/* User Creation Modal */}

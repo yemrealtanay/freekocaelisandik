@@ -6,6 +6,7 @@ const fs = require('fs');
 const XLSX = require('xlsx');
 const { getDb } = require('../db');
 const { requireAdmin } = require('../auth');
+const { logAction } = require('../logger');
 
 function normalizeText(text) {
   if (!text) return '';
@@ -114,6 +115,8 @@ router.post('/', requireAdmin, upload.single('excel'), async (req, res) => {
 
     // Start background processing
     processExcelInBackground(uploadId, filePath, district, req.user.id);
+
+    await logAction(req, 'EXCEL_UPLOAD', `${district} ilçesi için toplu üye aktarımı başlatıldı. Dosya: ${req.file.originalname}`);
 
     // Return success response immediately
     res.json({

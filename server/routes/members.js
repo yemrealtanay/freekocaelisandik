@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { getDb } = require('../db');
 const { requireAuth } = require('../auth');
+const { logAction } = require('../logger');
 
 function normalizeText(text) {
   if (!text) return '';
@@ -149,6 +150,8 @@ router.post('/', requireAuth, async (req, res) => {
       [eventId, memberId, req.user.id, 'SYSTEM', today, 'Üye sisteme manuel olarak eklendi.']
     );
 
+    await logAction(req, 'MEMBER_CREATE', `${first_name.toUpperCase()} ${last_name.toUpperCase()} (TCKN: ${tckn || '—'}, İlçe: ${district}) isimli üye sisteme eklendi.`);
+
     res.status(201).json({
       message: 'Üye başarıyla eklendi.',
       memberId
@@ -225,6 +228,12 @@ router.put('/:id', requireAuth, async (req, res) => {
         [eventId, id, req.user.id, 'ROLE_CHANGE', today, roleChangeNote]
       );
     }
+
+    let auditDetails = `${newFirstName} ${newLastName} (İlçe: ${member.district}) bilgileri güncellendi.`;
+    if (roleChangeNote) {
+      auditDetails += ` (${roleChangeNote})`;
+    }
+    await logAction(req, 'MEMBER_UPDATE', auditDetails);
 
     res.json({ message: 'Üye bilgileri başarıyla güncellendi.' });
   } catch (error) {
@@ -318,7 +327,11 @@ router.delete('/:id', requireAuth, async (req, res) => {
       return res.status(403).json({ message: 'Bu üyeyi silme yetkiniz bulunmamaktadır.' });
     }
 
+    const targetMember = await db.get('SELECT first_name, last_name, tckn FROM members WHERE id = ?', [id]);
     await db.run('DELETE FROM members WHERE id = ?', [id]);
+    if (targetMember) {
+      await logAction(req, 'MEMBER_DELETE', `${targetMember.first_name} ${targetMember.last_name} (TCKN: ${targetMember.tckn || '—'}, İlçe: ${member.district}) isimli üye silindi.`);
+    }
     res.json({ message: 'Üye başarıyla silindi.' });
   } catch (error) {
     console.error('Delete member error:', error);
