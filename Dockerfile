@@ -26,8 +26,5 @@ COPY server/ ./server/
 # Expose port
 EXPOSE 3001
 
-# Create volume mount directory for persistent SQLite database
-VOLUME ["/app/server/data"]
-
 # Run command
 CMD ["node", "server/index.js"]
