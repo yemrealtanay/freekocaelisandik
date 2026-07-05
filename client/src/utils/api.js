@@ -156,6 +156,31 @@ export const api = {
       return data;
     },
     status: (id) => request(`/api/uploads/status?id=${id}`),
-    list: () => request('/api/uploads/status')
+    list: () => request('/api/uploads/status'),
+    analyze: async (file) => {
+      const formData = new FormData();
+      formData.append('excel', file);
+
+      const headers = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const response = await fetch(`${API_URL}/api/uploads/analyze`, {
+        method: 'POST',
+        headers,
+        body: formData
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.message || 'Excel dosyası analiz edilemedi.');
+      }
+      return data;
+    },
+    import: (tempFileId, district, mapping) => request('/api/uploads/import', {
+      method: 'POST',
+      body: JSON.stringify({ tempFileId, district, mapping })
+    })
   }
 };

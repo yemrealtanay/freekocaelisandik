@@ -86,7 +86,128 @@ router.get('/status', requireAdmin, async (req, res) => {
   }
 });
 
-// POST /api/uploads (Upload Excel and parse async, Admin only)
+// POST /api/uploads/analyze (Upload Excel for header analysis, Admin only)
+router.post('/analyze', requireAdmin, upload.single('excel'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ message: 'Lütfen bir Excel dosyası seçin.' });
+  }
+
+  const filePath = req.file.path;
+  const fileName = req.file.filename;
+
+  try {
+    const workbook = XLSX.readFile(filePath);
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    
+    const rows = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+    if (rows.length === 0) {
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      return res.status(400).json({ message: 'Excel dosyasında veri bulunamadı.' });
+    }
+
+    const headers = Object.keys(rows[0]);
+
+    const guessedMapping = {
+      tckn: '',
+      first_name: '',
+      last_name: '',
+      phone: '',
+      ballot_area: '',
+      ballot_no: '',
+      description: ''
+    };
+
+    const normalize = (str) => {
+      if (!str) return '';
+      return str.toString().toLowerCase()
+        .replace(/ı/g, 'i')
+        .replace(/ğ/g, 'g')
+        .replace(/ü/g, 'u')
+        .replace(/ş/g, 's')
+        .replace(/ö/g, 'o')
+        .replace(/ç/g, 'c')
+        .replace(/[^a-z0-9]/g, '');
+    };
+
+    const ruleMaps = {
+      tckn: ['tckn', 'tcno', 'tckimlikno', 'tckimlik', 'kimlikno', 'tc', 'tckimliknumarasi'],
+      first_name: ['adi', 'ad', 'isim', 'firstname', 'adiniz'],
+      last_name: ['soyadi', 'soyad', 'soyisim', 'lastname', 'soyadiniz'],
+      phone: ['ceptelefon', 'telefon', 'tel', 'phone', 'gsm', 'cep', 'mobil', 'telefonno'],
+      ballot_area: ['sandikalani', 'okul', 'yer', 'adres', 'adresalani', 'okuladi', 'okulu', 'sandikyeri'],
+      ballot_no: ['sandikno', 'sandik', 'sandiknumarasi', 'no'],
+      description: ['aciklama', 'not', 'durum', 'detay', 'description', 'notlar', 'aciklamalar']
+    };
+
+    headers.forEach(header => {
+      const normHeader = normalize(header);
+      Object.keys(ruleMaps).forEach(field => {
+        if (!guessedMapping[field]) {
+          const matches = ruleMaps[field].some(kw => normHeader === kw || normHeader.includes(kw));
+          if (matches) {
+            guessedMapping[field] = header;
+          }
+        }
+      });
+    });
+
+    const previewRows = rows.slice(0, 3);
+
+    res.json({
+      tempFileId: fileName,
+      headers,
+      guessedMapping,
+      previewRows
+    });
+  } catch (error) {
+    console.error('Excel analyze error:', error);
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    res.status(500).json({ message: 'Excel dosyası analiz edilemedi.' });
+  }
+});
+
+// POST /api/uploads/import (Start actual import with user mappings, Admin only)
+router.post('/import', requireAdmin, async (req, res) => {
+  const { tempFileId, district, mapping } = req.body;
+
+  if (!tempFileId || !district || !mapping) {
+    return res.status(400).json({ message: 'Dosya, ilçe ve sütun eşleştirmesi zorunludur.' });
+  }
+
+  const uploadPath = path.join(__dirname, '../uploads');
+  const filePath = path.join(uploadPath, tempFileId);
+
+  if (!fs.existsSync(filePath)) {
+    return res.status(400).json({ message: 'Geçici dosya bulunamadı veya süresi dolmuş.' });
+  }
+
+  const uploadId = 'upload-' + Math.random().toString(36).substr(2, 9);
+
+  try {
+    const db = await getDb();
+
+    await db.run(
+      'INSERT INTO uploads (id, district, filename, status) VALUES (?, ?, ?, ?)',
+      [uploadId, district, tempFileId.replace(/^\d+-/, ''), 'PENDING']
+    );
+
+    processExcelInBackground(uploadId, filePath, district, req.user.id, mapping);
+
+    await logAction(req, 'EXCEL_UPLOAD', `${district} ilçesi için toplu üye aktarımı başlatıldı (Sütun Eşleştirmeli).`);
+
+    res.json({
+      message: 'Aktarım işlemi başlatıldı. Durumu takip edebilirsiniz.',
+      uploadId,
+      status: 'PENDING'
+    });
+  } catch (error) {
+    console.error('Import initiation error:', error);
+    res.status(500).json({ message: 'Aktarım başlatılamadı.' });
+  }
+});
+
+// POST /api/uploads (Upload Excel and parse async, Admin only - Legacy fallback)
 router.post('/', requireAdmin, upload.single('excel'), async (req, res) => {
   const { district } = req.body;
 
@@ -95,7 +216,6 @@ router.post('/', requireAdmin, upload.single('excel'), async (req, res) => {
   }
 
   if (!district) {
-    // Delete file if district is missing
     fs.unlinkSync(req.file.path);
     return res.status(400).json({ message: 'Lütfen yüklenecek ilçeyi seçin.' });
   }
@@ -107,18 +227,16 @@ router.post('/', requireAdmin, upload.single('excel'), async (req, res) => {
   try {
     const db = await getDb();
     
-    // Save initial PENDING status
     await db.run(
       'INSERT INTO uploads (id, district, filename, status) VALUES (?, ?, ?, ?)',
       [uploadId, district, fileName, 'PENDING']
     );
 
-    // Start background processing
-    processExcelInBackground(uploadId, filePath, district, req.user.id);
+    // Call worker without custom mapping (it will use fallback headers)
+    processExcelInBackground(uploadId, filePath, district, req.user.id, null);
 
-    await logAction(req, 'EXCEL_UPLOAD', `${district} ilçesi için toplu üye aktarımı başlatıldı. Dosya: ${req.file.originalname}`);
+    await logAction(req, 'EXCEL_UPLOAD', `${district} ilçesi için toplu üye aktarımı başlatıldı.`);
 
-    // Return success response immediately
     res.json({
       message: 'Excel dosyası başarıyla yüklendi. Arka planda işleme başlandı.',
       uploadId,
@@ -132,20 +250,17 @@ router.post('/', requireAdmin, upload.single('excel'), async (req, res) => {
 });
 
 // Background Worker
-async function processExcelInBackground(uploadId, filePath, district, userId) {
+async function processExcelInBackground(uploadId, filePath, district, userId, mapping) {
   let db;
   try {
     db = await getDb();
     
-    // Update status to PROCESSING
     await db.run('UPDATE uploads SET status = ? WHERE id = ?', ['PROCESSING', uploadId]);
 
-    // Parse Excel workbook
     const workbook = XLSX.readFile(filePath);
     const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
     
-    // Convert to JSON with empty fields as empty string
     const rows = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
 
     let successCount = 0;
@@ -153,24 +268,57 @@ async function processExcelInBackground(uploadId, filePath, district, userId) {
 
     const today = new Date().toISOString().split('T')[0];
 
-    // Read rows sequentially (sqlite3 runs single-threaded, transactions are best)
+    const map = mapping || {
+      tckn: 'TCKN',
+      first_name: 'Adi',
+      last_name: 'Soyadi',
+      phone: 'CepTelefon',
+      ballot_area: 'SandikAlani',
+      ballot_no: 'SandikNo',
+      description: 'Aciklama'
+    };
+
     await db.run('BEGIN TRANSACTION');
 
     for (const row of rows) {
-      // Map columns case-insensitively or standard naming
-      // Headers: TCKN, Adi, Soyadi, CepTelefon, IlAdi, IlceAdi, SandikAlani, SandikNo, Aciklama
-      const tckn = String(row['TCKN'] || '').trim();
-      const firstName = String(row['Adi'] || row['AD'] || row['Ad'] || '').trim().toUpperCase();
-      const lastName = String(row['Soyadi'] || row['SOYADI'] || row['Soyad'] || '').trim().toUpperCase();
-      let phone = String(row['CepTelefon'] || row['Telefon'] || row['TELEFON'] || '').trim();
-      const province = String(row['IlAdi'] || row['IL'] || 'KOCAELİ').trim().toUpperCase();
-      const rowDistrict = String(row['IlceAdi'] || row['ILCE'] || district).trim().toUpperCase();
-      const school = String(row['SandikAlani'] || row['Okul'] || row['YER'] || '').trim();
-      const ballotNo = String(row['SandikNo'] || '').trim();
-      const aciklama = String(row['Aciklama'] || row['Not'] || '').trim();
+      const getValueByMapKey = (row, key, defaultFieldName) => {
+        if (map && map[key]) {
+          return String(row[map[key]] || '').trim();
+        }
+        if (defaultFieldName === 'first_name') {
+          return String(row['Adi'] || row['AD'] || row['Ad'] || '').trim();
+        }
+        if (defaultFieldName === 'last_name') {
+          return String(row['Soyadi'] || row['SOYADI'] || row['Soyad'] || '').trim();
+        }
+        if (defaultFieldName === 'phone') {
+          return String(row['CepTelefon'] || row['Telefon'] || row['TELEFON'] || '').trim();
+        }
+        if (defaultFieldName === 'ballot_area') {
+          return String(row['SandikAlani'] || row['Okul'] || row['YER'] || '').trim();
+        }
+        if (defaultFieldName === 'ballot_no') {
+          return String(row['SandikNo'] || '').trim();
+        }
+        if (defaultFieldName === 'description') {
+          return String(row['Aciklama'] || row['Not'] || '').trim();
+        }
+        if (defaultFieldName === 'tckn') {
+          return String(row['TCKN'] || '').trim();
+        }
+        return '';
+      };
+
+      const tckn = getValueByMapKey(row, 'tckn', 'tckn');
+      const firstName = getValueByMapKey(row, 'first_name', 'first_name').toUpperCase();
+      const lastName = getValueByMapKey(row, 'last_name', 'last_name').toUpperCase();
+      let phone = getValueByMapKey(row, 'phone', 'phone');
+      const province = 'KOCAELİ';
+      const school = getValueByMapKey(row, 'ballot_area', 'ballot_area');
+      const ballotNo = getValueByMapKey(row, 'ballot_no', 'ballot_no');
+      const aciklama = getValueByMapKey(row, 'description', 'description');
 
       if (!firstName || !lastName) {
-        // Skip invalid rows
         continue;
       }
 
