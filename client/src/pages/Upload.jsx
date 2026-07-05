@@ -369,6 +369,17 @@ export default function UploadPage({ onUploadStart }) {
                 </select>
               </div>
 
+              <div className="form-group">
+                <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span>Görev / Rol</span>
+                  <span style={{ color: 'var(--text-dim)', fontSize: '11px' }}>(Opsiyonel)</span>
+                </label>
+                <select className="form-control" value={mapping.role || ''} onChange={(e) => handleMappingChange('role', e.target.value)}>
+                  <option value="">-- Eşleştirme Yok (Varsayılan: Görevsiz) --</option>
+                  {excelHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                </select>
+              </div>
+
             </div>
 
             {/* Live Preview Table */}
@@ -386,6 +397,7 @@ export default function UploadPage({ onUploadStart }) {
                       <th>Cep Telefonu</th>
                       <th>Sandık Alanı (Okul)</th>
                       <th>Sandık No</th>
+                      <th>Görev / Rol</th>
                       <th>Açıklama</th>
                     </tr>
                   </thead>
@@ -409,6 +421,9 @@ export default function UploadPage({ onUploadStart }) {
                         </td>
                         <td style={{ color: mapping.ballot_no ? 'var(--text-main)' : 'var(--text-dim)' }}>
                           {mapping.ballot_no ? String(row[mapping.ballot_no] || '') : '—'}
+                        </td>
+                        <td style={{ color: mapping.role ? 'var(--text-main)' : 'var(--text-dim)' }}>
+                          {mapping.role ? String(row[mapping.role] || '') : '—'}
                         </td>
                         <td style={{ color: mapping.description ? 'var(--text-muted)' : 'var(--text-dim)', fontSize: '12px' }}>
                           {mapping.description ? String(row[mapping.description] || '') : '—'}

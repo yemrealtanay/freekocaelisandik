@@ -115,6 +115,7 @@ router.post('/analyze', requireAdmin, upload.single('excel'), async (req, res) =
       phone: '',
       ballot_area: '',
       ballot_no: '',
+      role: '',
       description: ''
     };
 
@@ -137,6 +138,7 @@ router.post('/analyze', requireAdmin, upload.single('excel'), async (req, res) =
       phone: ['ceptelefon', 'telefon', 'tel', 'phone', 'gsm', 'cep', 'mobil', 'telefonno'],
       ballot_area: ['sandikalani', 'okul', 'yer', 'adres', 'adresalani', 'okuladi', 'okulu', 'sandikyeri'],
       ballot_no: ['sandikno', 'sandik', 'sandiknumarasi', 'no'],
+      role: ['durum', 'durumu', 'rol', 'rolu', 'gorev', 'gorevi', 'role', 'duty', 'position', 'unvan', 'sifat'],
       description: ['aciklama', 'not', 'durum', 'detay', 'description', 'notlar', 'aciklamalar']
     };
 
@@ -275,6 +277,7 @@ async function processExcelInBackground(uploadId, filePath, district, userId, ma
       phone: 'CepTelefon',
       ballot_area: 'SandikAlani',
       ballot_no: 'SandikNo',
+      role: 'Durumu',
       description: 'Aciklama'
     };
 
@@ -300,6 +303,9 @@ async function processExcelInBackground(uploadId, filePath, district, userId, ma
         if (defaultFieldName === 'ballot_no') {
           return String(row['SandikNo'] || '').trim();
         }
+        if (defaultFieldName === 'role') {
+          return String(row['Durumu'] || row['Durum'] || row['Rol'] || row['Gorev'] || '').trim();
+        }
         if (defaultFieldName === 'description') {
           return String(row['Aciklama'] || row['Not'] || '').trim();
         }
@@ -316,14 +322,42 @@ async function processExcelInBackground(uploadId, filePath, district, userId, ma
       const province = 'KOCAELİ';
       const school = getValueByMapKey(row, 'ballot_area', 'ballot_area');
       const ballotNo = getValueByMapKey(row, 'ballot_no', 'ballot_no');
+      const rawRole = getValueByMapKey(row, 'role', 'role');
       const aciklama = getValueByMapKey(row, 'description', 'description');
 
       if (!firstName || !lastName) {
         continue;
       }
 
+      // Role parsing & normalization
+      const normalizeRole = (val) => {
+        if (!val) return 'GOREVSIZ';
+        const s = val.toString().trim().toLowerCase()
+          .replace(/ı/g, 'i')
+          .replace(/ğ/g, 'g')
+          .replace(/ü/g, 'u')
+          .replace(/ş/g, 's')
+          .replace(/ö/g, 'o')
+          .replace(/ç/g, 'c')
+          .replace(/[^a-z0-9]/g, '');
+
+        if (s.includes('asiluye') || s === 'asil' || s.includes('asilgorevli')) return 'ASIL_UYE';
+        if (s.includes('yedekuye') || s === 'yedek' || (s.includes('yedek') && !s.includes('musahit'))) return 'YEDEK_UYE';
+        if (s.includes('yedekmusahit') || (s.includes('yedek') && s.includes('musahit'))) return 'YEDEK_MUSAHIT';
+        if (s.includes('musahit')) return 'MUSAHIT';
+        if (s.includes('okulsorumluyardimcisi') || s.includes('yardimci')) return 'OKUL_SORUMLU_YARDIMCISI';
+        if (s.includes('okulsorumlusu') || s.includes('okulsorumlu')) return 'OKUL_SORUMLUSU';
+        if (s.includes('avukat')) return 'AVUKAT';
+        if (s.includes('kurye')) return 'KURYE';
+        if (s.includes('bilisim')) return 'BILISIM';
+        if (s.includes('bolge') || s.includes('mahalle')) return 'BOLGE_MAHALLE';
+        
+        return 'GOREVSIZ';
+      };
+
+      const role = rawRole ? normalizeRole(rawRole) : 'GOREVSIZ';
+
       // Format telephone (e.g. remove spaces, handle leading zero)
-      // Standard format in db can be just digits or formatted. We can normalize it.
       let normalizedPhone = phone.replace(/\D/g, '');
       if (normalizedPhone.startsWith('90') && normalizedPhone.length === 12) {
         normalizedPhone = normalizedPhone.substring(2);
@@ -334,8 +368,6 @@ async function processExcelInBackground(uploadId, filePath, district, userId, ma
 
       try {
         // Duplicate Check Logic:
-        // Try to find matching member by first_name, last_name and tckn (if provided)
-        // Or if tckn is empty, match by first_name, last_name and phone
         let existingMember = null;
         if (tckn) {
           existingMember = await db.get(
@@ -355,7 +387,6 @@ async function processExcelInBackground(uploadId, filePath, district, userId, ma
         }
 
         if (existingMember) {
-          // Skip duplicate member row
           continue;
         }
 
@@ -372,8 +403,8 @@ async function processExcelInBackground(uploadId, filePath, district, userId, ma
         });
         await db.run(
           `INSERT INTO members (id, tckn, first_name, last_name, phone, province, district, school, ballot_no, role, search_index)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'GOREVSIZ', ?)`,
-          [memberId, tckn, firstName, lastName, normalizedPhone, province, district, school, ballotNo, searchIndex]
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [memberId, tckn, firstName, lastName, normalizedPhone, province, district, school, ballotNo, role, searchIndex]
         );
 
         // Add note/activity if Aciklama is present
