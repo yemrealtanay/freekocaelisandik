@@ -165,18 +165,33 @@ router.get('/dashboard-stats', requireAdmin, async (req, res) => {
     // 5. Member Counts per District
     const districtStats = await db.all('SELECT district, COUNT(*) as count FROM members GROUP BY district');
     
-    // 6. User Counts per District
+    // 6. Assigned Member Counts per District (role !== 'GOREVSIZ')
+    const districtAssignedStats = await db.all("SELECT district, COUNT(*) as count FROM members WHERE role != 'GOREVSIZ' GROUP BY district");
+
+    // 7. Responsible Member Counts per District (roles that are responsibles)
+    const districtResponsiblesStats = await db.all(`
+      SELECT district, COUNT(*) as count 
+      FROM members 
+      WHERE role IN ('OKUL_SORUMLUSU', 'OKUL_SORUMLU_YARDIMCISI', 'BILISIM', 'BOLGE_MAHALLE') 
+      GROUP BY district
+    `);
+
+    // 8. User Counts per District
     const districtUsersStats = await db.all('SELECT district, COUNT(*) as count FROM users WHERE role = "USER" GROUP BY district');
 
     // Combine stats per district
     const districtsData = DISTRICTS.map(distName => {
       const distNameLower = turkishToLower(distName);
       const memStat = districtStats.find(d => d.district && turkishToLower(d.district) === distNameLower) || { count: 0 };
+      const assignedStat = districtAssignedStats.find(d => d.district && turkishToLower(d.district) === distNameLower) || { count: 0 };
+      const respStat = districtResponsiblesStats.find(d => d.district && turkishToLower(d.district) === distNameLower) || { count: 0 };
       const userStat = districtUsersStats.find(d => d.district && turkishToLower(d.district) === distNameLower) || { count: 0 };
       
       return {
         district: distName,
         membersCount: memStat.count,
+        assignedCount: assignedStat.count,
+        responsiblesCount: respStat.count,
         usersCount: userStat.count
       };
     });

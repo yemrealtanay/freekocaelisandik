@@ -69,7 +69,7 @@ export default function Dashboard() {
         </div>
 
         <div className="stat-card">
-          <span className="stat-label">Aktif Kullanıcı (Sorumlu)</span>
+          <span className="stat-label">Sistem Kullanıcısı</span>
           <span className="stat-value">{stats.totalUsers}</span>
           <div className="stat-icon-wrapper">
             <ShieldAlert size={32} />
@@ -95,6 +95,7 @@ export default function Dashboard() {
               <tr>
                 <th style={{ padding: '12px 16px' }}>İlçe Adı</th>
                 <th style={{ padding: '12px 16px', textAlign: 'right' }}>Üye Sayısı</th>
+                <th style={{ padding: '12px 16px', textAlign: 'right' }}>Görevli Sayısı</th>
                 <th style={{ padding: '12px 16px', textAlign: 'right' }}>Sorumlu Sayısı</th>
               </tr>
             </thead>
@@ -103,7 +104,8 @@ export default function Dashboard() {
                 <tr key={d.district}>
                   <td style={{ padding: '12px 16px', fontWeight: 500 }}>{d.district}</td>
                   <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 600 }}>{d.membersCount}</td>
-                  <td style={{ padding: '12px 16px', textAlign: 'right', color: 'var(--text-muted)' }}>{d.usersCount}</td>
+                  <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 600, color: 'var(--primary)' }}>{d.assignedCount || 0}</td>
+                  <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 600, color: 'var(--success)' }}>{d.responsiblesCount || 0}</td>
                 </tr>
               ))}
             </tbody>
