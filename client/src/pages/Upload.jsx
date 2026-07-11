@@ -28,6 +28,8 @@ export default function UploadPage({ onUploadStart }) {
     phone: '',
     ballot_area: '',
     ballot_no: '',
+    role: '',
+    district_name: '',
     description: ''
   });
 
@@ -92,6 +94,11 @@ export default function UploadPage({ onUploadStart }) {
   const handleImportSubmit = async () => {
     if (!mapping.first_name || !mapping.last_name) {
       setErrorMsg('Eşleştirmede "Adı" ve "Soyadı" alanları zorunludur.');
+      return;
+    }
+
+    if (district === 'ALL_DISTRICTS' && !mapping.district_name) {
+      setErrorMsg('Eşleştirmede "İlçe Sütunu" zorunludur.');
       return;
     }
 
@@ -169,6 +176,7 @@ export default function UploadPage({ onUploadStart }) {
                   value={district}
                   onChange={(e) => setDistrict(e.target.value)}
                 >
+                  <option value="ALL_DISTRICTS">Tüm İlçeler (Excel'den Oku)</option>
                   {DISTRICTS.map((d) => (
                     <option key={d} value={d}>{d}</option>
                   ))}
@@ -369,6 +377,19 @@ export default function UploadPage({ onUploadStart }) {
                 </select>
               </div>
 
+              {district === 'ALL_DISTRICTS' && (
+                <div className="form-group">
+                  <label>
+                    <span>İlçe Sütunu</span>
+                    <span style={{ color: 'var(--danger)', marginLeft: '4px' }}>*</span>
+                  </label>
+                  <select className="form-control" value={mapping.district_name || ''} onChange={(e) => handleMappingChange('district_name', e.target.value)}>
+                    <option value="">-- Sütun Seçin --</option>
+                    {excelHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                  </select>
+                </div>
+              )}
+
               <div className="form-group">
                 <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                   <span>Görev / Rol</span>
@@ -398,6 +419,7 @@ export default function UploadPage({ onUploadStart }) {
                       <th>Sandık Alanı (Okul)</th>
                       <th>Sandık No</th>
                       <th>Görev / Rol</th>
+                      {district === 'ALL_DISTRICTS' && <th>İlçe</th>}
                       <th>Açıklama</th>
                     </tr>
                   </thead>
@@ -425,6 +447,11 @@ export default function UploadPage({ onUploadStart }) {
                         <td style={{ color: mapping.role ? 'var(--text-main)' : 'var(--text-dim)' }}>
                           {mapping.role ? String(row[mapping.role] || '') : '—'}
                         </td>
+                        {district === 'ALL_DISTRICTS' && (
+                          <td style={{ color: mapping.district_name ? 'var(--text-main)' : 'var(--text-dim)', fontWeight: 500 }}>
+                            {mapping.district_name ? String(row[mapping.district_name] || '') : '—'}
+                          </td>
+                        )}
                         <td style={{ color: mapping.description ? 'var(--text-muted)' : 'var(--text-dim)', fontSize: '12px' }}>
                           {mapping.description ? String(row[mapping.description] || '') : '—'}
                         </td>

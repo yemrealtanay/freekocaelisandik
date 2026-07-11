@@ -116,6 +116,7 @@ router.post('/analyze', requireAdmin, upload.single('excel'), async (req, res) =
       ballot_area: '',
       ballot_no: '',
       role: '',
+      district_name: '',
       description: ''
     };
 
@@ -139,6 +140,7 @@ router.post('/analyze', requireAdmin, upload.single('excel'), async (req, res) =
       ballot_area: ['sandikalani', 'okul', 'yer', 'adres', 'adresalani', 'okuladi', 'okulu', 'sandikyeri'],
       ballot_no: ['sandikno', 'sandik', 'sandiknumarasi', 'no'],
       role: ['durum', 'durumu', 'rol', 'rolu', 'gorev', 'gorevi', 'role', 'duty', 'position', 'unvan', 'sifat'],
+      district_name: ['ilceadi', 'ilce', 'ilcedurumu', 'ilce_adi', 'district', 'town'],
       description: ['aciklama', 'not', 'durum', 'detay', 'description', 'notlar', 'aciklamalar']
     };
 
@@ -196,7 +198,10 @@ router.post('/import', requireAdmin, async (req, res) => {
 
     processExcelInBackground(uploadId, filePath, district, req.user.id, mapping);
 
-    await logAction(req, 'EXCEL_UPLOAD', `${district} ilçesi için toplu üye aktarımı başlatıldı (Sütun Eşleştirmeli).`);
+    const logDetails = district === 'ALL_DISTRICTS'
+      ? 'Tüm ilçeler için toplu üye aktarımı başlatıldı (Sütun Eşleştirmeli).'
+      : `${district} ilçesi için toplu üye aktarımı başlatıldı (Sütun Eşleştirmeli).`;
+    await logAction(req, 'EXCEL_UPLOAD', logDetails);
 
     res.json({
       message: 'Aktarım işlemi başlatıldı. Durumu takip edebilirsiniz.',
@@ -251,6 +256,45 @@ router.post('/', requireAdmin, upload.single('excel'), async (req, res) => {
   }
 });
 
+const DISTRICTS = [
+  'Başiskele', 'Çayırova', 'Darıca', 'Derince', 'Dilovası', 
+  'Gebze', 'Gölcük', 'İzmit', 'Kandıra', 'Karamürsel', 'Kartepe', 'Körfez'
+];
+
+function resolveDistrictName(val) {
+  if (!val) return null;
+  const normalized = val.toString().trim().toUpperCase()
+    .replace(/İ/g, 'I')
+    .replace(/ı/g, 'I')
+    .replace(/Ğ/g, 'G')
+    .replace(/ğ/g, 'G')
+    .replace(/Ü/g, 'U')
+    .replace(/ü/g, 'U')
+    .replace(/Ş/g, 'S')
+    .replace(/ş/g, 'S')
+    .replace(/Ö/g, 'O')
+    .replace(/ö/g, 'O')
+    .replace(/Ç/g, 'C')
+    .replace(/ç/g, 'C');
+
+  return DISTRICTS.find(d => {
+    const dNorm = d.toUpperCase()
+      .replace(/İ/g, 'I')
+      .replace(/ı/g, 'I')
+      .replace(/Ğ/g, 'G')
+      .replace(/ğ/g, 'G')
+      .replace(/Ü/g, 'U')
+      .replace(/ü/g, 'U')
+      .replace(/Ş/g, 'S')
+      .replace(/ş/g, 'S')
+      .replace(/Ö/g, 'O')
+      .replace(/ö/g, 'O')
+      .replace(/Ç/g, 'C')
+      .replace(/ç/g, 'C');
+    return normalized === dNorm || normalized.includes(dNorm);
+  }) || null;
+}
+
 // Background Worker
 async function processExcelInBackground(uploadId, filePath, district, userId, mapping) {
   let db;
@@ -278,6 +322,7 @@ async function processExcelInBackground(uploadId, filePath, district, userId, ma
       ballot_area: 'SandikAlani',
       ballot_no: 'SandikNo',
       role: 'Durumu',
+      district_name: 'İlceAdi',
       description: 'Aciklama'
     };
 
@@ -306,6 +351,9 @@ async function processExcelInBackground(uploadId, filePath, district, userId, ma
         if (defaultFieldName === 'role') {
           return String(row['Durumu'] || row['Durum'] || row['Rol'] || row['Gorev'] || '').trim();
         }
+        if (defaultFieldName === 'district_name') {
+          return String(row['İlceAdi'] || row['İlçe'] || row['Ilce'] || row['IlceAdi'] || '').trim();
+        }
         if (defaultFieldName === 'description') {
           return String(row['Aciklama'] || row['Not'] || '').trim();
         }
@@ -327,6 +375,16 @@ async function processExcelInBackground(uploadId, filePath, district, userId, ma
 
       if (!firstName || !lastName) {
         continue;
+      }
+
+      // Dynamic District Resolution
+      let targetDistrict = district;
+      if (district === 'ALL_DISTRICTS') {
+        const rowDistrictStr = getValueByMapKey(row, 'district_name', 'district_name');
+        targetDistrict = resolveDistrictName(rowDistrictStr);
+        if (!targetDistrict) {
+          continue; // Skip if district is invalid or outside Kocaeli
+        }
       }
 
       // Role parsing & normalization
@@ -372,17 +430,17 @@ async function processExcelInBackground(uploadId, filePath, district, userId, ma
         if (tckn) {
           existingMember = await db.get(
             'SELECT id FROM members WHERE first_name = ? AND last_name = ? AND tckn = ? AND district = ?',
-            [firstName, lastName, tckn, district]
+            [firstName, lastName, tckn, targetDistrict]
           );
         } else if (normalizedPhone) {
           existingMember = await db.get(
             'SELECT id FROM members WHERE first_name = ? AND last_name = ? AND phone = ? AND district = ?',
-            [firstName, lastName, normalizedPhone, district]
+            [firstName, lastName, normalizedPhone, targetDistrict]
           );
         } else {
           existingMember = await db.get(
             'SELECT id FROM members WHERE first_name = ? AND last_name = ? AND district = ?',
-            [firstName, lastName, district]
+            [firstName, lastName, targetDistrict]
           );
         }
 
@@ -399,12 +457,12 @@ async function processExcelInBackground(uploadId, filePath, district, userId, ma
           tckn,
           school,
           ballot_no: ballotNo,
-          district
+          district: targetDistrict
         });
         await db.run(
           `INSERT INTO members (id, tckn, first_name, last_name, phone, province, district, school, ballot_no, role, search_index)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [memberId, tckn, firstName, lastName, normalizedPhone, province, district, school, ballotNo, role, searchIndex]
+          [memberId, tckn, firstName, lastName, normalizedPhone, province, targetDistrict, school, ballotNo, role, searchIndex]
         );
 
         // Add note/activity if Aciklama is present
