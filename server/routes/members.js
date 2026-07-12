@@ -16,7 +16,8 @@ function normalizeText(text) {
     .replace(/ö/g, 'o')
     .replace(/ü/g, 'u')
     .replace(/i̇/g, 'i')
-    .replace(/\s+/g, '');
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function buildSearchIndex(member) {
@@ -29,7 +30,7 @@ function buildSearchIndex(member) {
     member.ballot_no,
     member.district
   ];
-  return parts.map(normalizeText).join('|');
+  return parts.map(normalizeText).join(' ');
 }
 
 // Helper to check if user has access to a district
@@ -69,9 +70,11 @@ router.get('/', requireAuth, async (req, res) => {
     }
 
     if (search) {
-      const cleanSearch = normalizeText(search);
-      query += ' AND m.search_index LIKE ?';
-      params.push(`%${cleanSearch}%`);
+      const searchTerms = normalizeText(search).split(' ').filter(Boolean);
+      searchTerms.forEach(term => {
+        query += ' AND m.search_index LIKE ?';
+        params.push(`%${term}%`);
+      });
     }
 
     query += ' ORDER BY m.first_name ASC, m.last_name ASC';

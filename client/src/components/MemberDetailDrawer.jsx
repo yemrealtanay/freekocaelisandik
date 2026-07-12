@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, Plus, Phone, Calendar, User, Info, FileText, CheckCircle2 } from 'lucide-react';
+import { X, Save, Plus, Phone, Calendar, User, Info, FileText, CheckCircle2, Trash2 } from 'lucide-react';
 import { api } from '../utils/api';
 import { formatPhone } from './MemberTable';
 
@@ -86,6 +86,24 @@ export default function MemberDetailDrawer({ member, onClose, onUpdateSuccess })
     } catch (err) {
       setErrorMsg(err.message || 'Güncelleme hatası.');
     } finally {
+      setSubmittingMember(false);
+    }
+  };
+
+  const handleDeleteMember = async () => {
+    if (!window.confirm(`${firstName} ${lastName} isimli üyeyi sistemden tamamen silmek istediğinize emin misiniz?`)) {
+      return;
+    }
+    setSubmittingMember(true);
+    setErrorMsg('');
+    setSuccessMsg('');
+    try {
+      await api.members.delete(member.id);
+      onUpdateSuccess();
+      onClose();
+    } catch (err) {
+      console.error(err);
+      setErrorMsg(err.message || 'Üye silinirken bir hata oluştu.');
       setSubmittingMember(false);
     }
   };
@@ -286,15 +304,40 @@ export default function MemberDetailDrawer({ member, onClose, onUpdateSuccess })
                 </select>
               </div>
 
-              <button
-                type="submit"
-                className="btn btn-primary"
-                disabled={submittingMember}
-                style={{ width: '100%', marginTop: '16px' }}
-              >
-                <Save size={16} />
-                <span>Değişiklikleri Kaydet</span>
-              </button>
+              <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={submittingMember}
+                  style={{ flex: 1 }}
+                >
+                  <Save size={16} />
+                  <span>Kaydet</span>
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-danger"
+                  onClick={handleDeleteMember}
+                  disabled={submittingMember}
+                  style={{
+                    backgroundColor: 'var(--danger)',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: 'var(--radius-md)',
+                    padding: '10px 16px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: 500
+                  }}
+                >
+                  <Trash2 size={16} />
+                  <span>Üyeyi Sil</span>
+                </button>
+              </div>
             </form>
           ) : (
             /* Timeline View & Log Add Form */

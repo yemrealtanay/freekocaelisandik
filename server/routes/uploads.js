@@ -20,7 +20,8 @@ function normalizeText(text) {
     .replace(/ö/g, 'o')
     .replace(/ü/g, 'u')
     .replace(/i̇/g, 'i')
-    .replace(/\s+/g, '');
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function buildSearchIndex(member) {
@@ -33,7 +34,7 @@ function buildSearchIndex(member) {
     member.ballot_no,
     member.district
   ];
-  return parts.map(normalizeText).join('|');
+  return parts.map(normalizeText).join(' ');
 }
 
 // Configure multer

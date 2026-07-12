@@ -140,6 +140,64 @@ async function getDb() {
     console.log('Migration completed successfully.');
   }
 
+  // Migration v2: Re-build search_index with spaces and space normalization
+  try {
+    await db.exec(`
+      CREATE TABLE IF NOT EXISTS settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      );
+    `);
+
+    const migrationCheck = await db.get("SELECT value FROM settings WHERE key = 'search_index_migration_v2'");
+    if (!migrationCheck) {
+      console.log('Migrating: Running search_index migration v2 (space separation)...');
+      
+      const normalizeText = (text) => {
+        if (!text) return '';
+        return text
+          .toString()
+          .toLowerCase()
+          .replace(/ı/g, 'i')
+          .replace(/ş/g, 's')
+          .replace(/ğ/g, 'g')
+          .replace(/ç/g, 'c')
+          .replace(/ö/g, 'o')
+          .replace(/ü/g, 'u')
+          .replace(/i̇/g, 'i')
+          .replace(/\s+/g, ' ')
+          .trim();
+      };
+
+      const buildSearchIndex = (member) => {
+        const parts = [
+          member.first_name,
+          member.last_name,
+          member.phone,
+          member.tckn,
+          member.school,
+          member.ballot_no,
+          member.district
+        ];
+        return parts.map(normalizeText).join(' ');
+      };
+
+      const membersList = await db.all('SELECT * FROM members');
+      await db.run('BEGIN TRANSACTION');
+      for (const member of membersList) {
+        const searchIndex = buildSearchIndex(member);
+        await db.run('UPDATE members SET search_index = ? WHERE id = ?', [searchIndex, member.id]);
+      }
+      await db.run('COMMIT');
+
+      await db.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('search_index_migration_v2', 'true')");
+      console.log('Migrating: Search_index migration v2 completed successfully.');
+    }
+  } catch (err) {
+    console.error('Failed to run search_index migration v2:', err);
+    try { await db.run('ROLLBACK'); } catch(_) {}
+  }
+
   // Seed default admin user if not exists
   const adminExists = await db.get('SELECT * FROM users WHERE email = ?', ['admin@kocaeli-org.local']);
   if (!adminExists) {
