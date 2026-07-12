@@ -430,22 +430,53 @@ async function processExcelInBackground(uploadId, filePath, district, userId, ma
         let existingMember = null;
         if (tckn) {
           existingMember = await db.get(
-            'SELECT id FROM members WHERE first_name = ? AND last_name = ? AND tckn = ? AND district = ?',
+            'SELECT id, role FROM members WHERE first_name = ? AND last_name = ? AND tckn = ? AND district = ?',
             [firstName, lastName, tckn, targetDistrict]
           );
         } else if (normalizedPhone) {
           existingMember = await db.get(
-            'SELECT id FROM members WHERE first_name = ? AND last_name = ? AND phone = ? AND district = ?',
+            'SELECT id, role FROM members WHERE first_name = ? AND last_name = ? AND phone = ? AND district = ?',
             [firstName, lastName, normalizedPhone, targetDistrict]
           );
         } else {
           existingMember = await db.get(
-            'SELECT id FROM members WHERE first_name = ? AND last_name = ? AND district = ?',
+            'SELECT id, role FROM members WHERE first_name = ? AND last_name = ? AND district = ?',
             [firstName, lastName, targetDistrict]
           );
         }
 
         if (existingMember) {
+          // If the role has changed, update it and insert timeline event log
+          if (existingMember.role !== role) {
+            await db.run(
+              'UPDATE members SET role = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+              [role, existingMember.id]
+            );
+
+            const roleLabels = {
+              GOREVSIZ: 'Görevsiz',
+              ASIL_UYE: 'Asil Üye',
+              YEDEK_UYE: 'Yedek Üye',
+              MUSAHIT: 'Müşahit',
+              YEDEK_MUSAHIT: 'Yedek Müşahit',
+              OKUL_SORUMLUSU: 'Okul Sorumlusu',
+              OKUL_YARDIMCISI: 'Okul Sorumlu Yardımcısı',
+              AVUKAT: 'Avukat',
+              KURYE: 'Kurye',
+              BILISIM: 'Bilişim Sorumlusu',
+              BOLGE_MAHALLE: 'Bölge/Mahalle Sorumlusu'
+            };
+
+            const oldRoleLabel = roleLabels[existingMember.role] || existingMember.role;
+            const newRoleLabel = roleLabels[role] || role;
+            const noteText = `Excel aktarımı sırasında görev güncellendi: ${oldRoleLabel} ➡️ ${newRoleLabel}`;
+
+            const eventId = 'event-' + Math.random().toString(36).substr(2, 9);
+            await db.run(
+              'INSERT INTO timeline_events (id, member_id, user_id, type, date, note) VALUES (?, ?, ?, ?, ?, ?)',
+              [eventId, existingMember.id, userId, 'ROLE_CHANGE', today, noteText]
+            );
+          }
           continue;
         }
 

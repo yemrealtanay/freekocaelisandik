@@ -198,6 +198,68 @@ async function getDb() {
     try { await db.run('ROLLBACK'); } catch(_) {}
   }
 
+  // Migration v3: Clean up duplicate members (same TCKN, first name, and last name)
+  try {
+    const migrationCheck = await db.get("SELECT value FROM settings WHERE key = 'duplicate_cleanup_migration_v3'");
+    if (!migrationCheck) {
+      console.log('Migrating: Running duplicate members cleanup migration v3...');
+
+      const dupGroups = await db.all(`
+        SELECT tckn, first_name, last_name, COUNT(*) as count 
+        FROM members 
+        WHERE tckn IS NOT NULL AND tckn != '' 
+        GROUP BY tckn, first_name, last_name 
+        HAVING count > 1
+      `);
+
+      if (dupGroups.length > 0) {
+        console.log(`Migrating: Found ${dupGroups.length} duplicate groups to resolve...`);
+        await db.run('BEGIN TRANSACTION');
+
+        for (const group of dupGroups) {
+          // Select all members in the group, sorted by created_at ascending
+          const membersInGroup = await db.all(
+            `SELECT id, role, district FROM members 
+             WHERE tckn = ? AND first_name = ? AND last_name = ? 
+             ORDER BY created_at ASC`,
+            [group.tckn, group.first_name, group.last_name]
+          );
+
+          if (membersInGroup.length > 1) {
+            const primaryMember = membersInGroup[0];
+            const duplicateMembers = membersInGroup.slice(1);
+
+            console.log(`Migrating: Resolving duplicate group TCKN: ${group.tckn}. Keeping member ${primaryMember.id}, deleting ${duplicateMembers.length} duplicates.`);
+
+            for (const dup of duplicateMembers) {
+              // Update timeline events to point to the primary member
+              await db.run(
+                'UPDATE timeline_events SET member_id = ? WHERE member_id = ?',
+                [primaryMember.id, dup.id]
+              );
+
+              // Delete the duplicate member
+              await db.run(
+                'DELETE FROM members WHERE id = ?',
+                [dup.id]
+              );
+            }
+          }
+        }
+
+        await db.run('COMMIT');
+        console.log('Migrating: Duplicate members resolved successfully.');
+      } else {
+        console.log('Migrating: No duplicate members found.');
+      }
+
+      await db.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('duplicate_cleanup_migration_v3', 'true')");
+    }
+  } catch (err) {
+    console.error('Failed to run duplicate cleanup migration v3:', err);
+    try { await db.run('ROLLBACK'); } catch(_) {}
+  }
+
   // Seed default admin user if not exists
   const adminExists = await db.get('SELECT * FROM users WHERE email = ?', ['admin@kocaeli-org.local']);
   if (!adminExists) {
