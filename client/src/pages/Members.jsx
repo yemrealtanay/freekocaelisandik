@@ -23,6 +23,8 @@ const STANCE_FILTERS = [
 
 export default function MembersPage({ currentUser, initialNeighborhood, initialStance }) {
   const isAdmin = currentUser.role === 'ADMIN';
+  const assignedNeighborhoods = currentUser.neighborhoods || [];
+  const defaultNeighborhood = assignedNeighborhoods.length === 1 ? assignedNeighborhoods[0] : '';
 
   // Filters & State
   const [selectedDistrict, setSelectedDistrict] = useState(
@@ -30,7 +32,7 @@ export default function MembersPage({ currentUser, initialNeighborhood, initialS
   );
   const [neighborhoods, setNeighborhoods] = useState([]);
   const [selectedNeighborhood, setSelectedNeighborhood] = useState(
-    initialNeighborhood || currentUser.neighborhood || 'TUM'
+    initialNeighborhood || defaultNeighborhood || 'TUM'
   );
   const [selectedStance, setSelectedStance] = useState(initialStance || 'TUM');
   const [searchQuery, setSearchQuery] = useState('');
@@ -57,9 +59,7 @@ export default function MembersPage({ currentUser, initialNeighborhood, initialS
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [phone, setPhone] = useState('');
-  const [neighborhoodInput, setNeighborhoodInput] = useState(
-    currentUser.neighborhood || ''
-  );
+  const [neighborhoodInput, setNeighborhoodInput] = useState(defaultNeighborhood);
   const [school, setSchool] = useState('');
   const [ballotNo, setBallotNo] = useState('');
   const [role, setRole] = useState('GOREVSIZ');
@@ -170,7 +170,7 @@ export default function MembersPage({ currentUser, initialNeighborhood, initialS
       setFirstName('');
       setLastName('');
       setPhone('');
-      setNeighborhoodInput(currentUser.neighborhood || '');
+      setNeighborhoodInput(defaultNeighborhood);
       setSchool('');
       setBallotNo('');
       setRole('GOREVSIZ');
@@ -183,6 +183,11 @@ export default function MembersPage({ currentUser, initialNeighborhood, initialS
       setSubmittingMember(false);
     }
   };
+
+  // Representatives with assigned neighborhoods may only add members to those neighborhoods
+  const createNeighborhoodOptions = assignedNeighborhoods.length
+    ? assignedNeighborhoods
+    : neighborhoods.map(n => n.neighborhood);
 
   const handleExport = () => {
     exportToCSV(members, `${selectedDistrict}_${selectedNeighborhood !== 'TUM' ? selectedNeighborhood : 'Tum_Mahalleler'}`);
@@ -267,7 +272,9 @@ export default function MembersPage({ currentUser, initialNeighborhood, initialS
                 fontWeight: selectedNeighborhood !== 'TUM' ? 600 : 400
               }}
             >
-              <option value="TUM">Tüm Mahalleler ({neighborhoods.length})</option>
+              <option value="TUM">
+                {assignedNeighborhoods.length ? 'Atanan Tüm Mahalleler' : 'Tüm Mahalleler'} ({neighborhoods.length})
+              </option>
               {neighborhoods.map((n) => (
                 <option key={n.neighborhood} value={n.neighborhood}>
                   {n.neighborhood} ({n.count})
@@ -412,15 +419,16 @@ export default function MembersPage({ currentUser, initialNeighborhood, initialS
                   </div>
                   <div className="form-group">
                     <label>Mahalle</label>
-                    {neighborhoods.length > 0 ? (
+                    {createNeighborhoodOptions.length > 0 ? (
                       <select
                         className="form-control"
                         value={neighborhoodInput}
                         onChange={(e) => setNeighborhoodInput(e.target.value)}
+                        required={assignedNeighborhoods.length > 0}
                       >
                         <option value="">-- Mahalle Seçin --</option>
-                        {neighborhoods.map(n => (
-                          <option key={n.neighborhood} value={n.neighborhood}>{n.neighborhood}</option>
+                        {createNeighborhoodOptions.map(n => (
+                          <option key={n} value={n}>{n}</option>
                         ))}
                       </select>
                     ) : (

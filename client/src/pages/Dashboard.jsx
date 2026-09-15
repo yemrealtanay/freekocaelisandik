@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../utils/api';
+import { NeighborhoodChips } from '../components/NeighborhoodPicker';
 import { Users, PhoneCall, CheckCircle2, AlertCircle, TrendingUp, UserCheck, Clock, MapPin, ExternalLink, RefreshCw } from 'lucide-react';
 
 const PREDEFINED_DISTRICTS = [
@@ -9,6 +10,7 @@ const PREDEFINED_DISTRICTS = [
 
 export default function Dashboard({ currentUser, onNavigateToMembers }) {
   const isAdmin = currentUser?.role === 'ADMIN';
+  const assignedNeighborhoods = currentUser?.neighborhoods || [];
   const [selectedDistrict, setSelectedDistrict] = useState(
     currentUser?.district || 'Gölcük'
   );
@@ -93,15 +95,21 @@ export default function Dashboard({ currentUser, onNavigateToMembers }) {
                 ))}
               </select>
             ) : (
-              <span className="district-badge">
-                {currentUser?.neighborhood ? `${currentUser.neighborhood}` : `${selectedDistrict}`}
+              <span className="district-badge" title={assignedNeighborhoods.join(', ')}>
+                {assignedNeighborhoods.length === 1
+                  ? assignedNeighborhoods[0]
+                  : assignedNeighborhoods.length > 1
+                    ? `${selectedDistrict} · ${assignedNeighborhoods.length} Mahalle`
+                    : selectedDistrict}
               </span>
             )}
           </div>
           <span className="page-subtitle">
-            {currentUser?.neighborhood 
-              ? `${currentUser.neighborhood} Mahallesi saha görüşmeleri ve seçmen intiba istatistikleri`
-              : 'Gölcük saha görüşmeleri, seçmen eğilimi ve mahalle sorumlusu performansı'}
+            {assignedNeighborhoods.length === 1
+              ? `${assignedNeighborhoods[0]} Mahallesi saha görüşmeleri ve seçmen intiba istatistikleri`
+              : assignedNeighborhoods.length > 1
+                ? `Size atanan ${assignedNeighborhoods.length} mahallenin saha görüşmeleri ve seçmen intiba istatistikleri`
+                : 'Gölcük saha görüşmeleri, seçmen eğilimi ve mahalle sorumlusu performansı'}
           </span>
         </div>
 
@@ -286,16 +294,22 @@ export default function Dashboard({ currentUser, onNavigateToMembers }) {
           <div className="section-head">
             <div>
               <h3 style={{ fontSize: '16px', fontWeight: 700, margin: 0 }}>
-                {stats?.isNeighborhoodScoped ? `${stats.neighborhood} Mahallesi Saha Dağılımı` : 'Mahallelere Göre Saha Dağılımı'}
+                {stats?.isNeighborhoodScoped
+                  ? (stats.neighborhoods.length === 1
+                    ? `${stats.neighborhoods[0]} Mahallesi Saha Dağılımı`
+                    : 'Sorumlu Olduğunuz Mahallelerin Saha Dağılımı')
+                  : 'Mahallelere Göre Saha Dağılımı'}
               </h3>
               <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: '4px 0 0' }}>
-                {stats?.isNeighborhoodScoped 
-                  ? 'Kendi mahallenize ait kayıtlı üye sayıları ve intiba durumları' 
+                {stats?.isNeighborhoodScoped
+                  ? 'Size atanan mahallelere ait kayıtlı üye sayıları ve intiba durumları'
                   : 'Mahalle bazında üye sayıları ve intiba dağılım detayları'}
               </p>
             </div>
             <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-              {stats?.isNeighborhoodScoped ? 'Sorumlu Olduğunuz Mahalle' : `${stats?.neighborhoodsData?.length || 0} Mahalle`}
+              {stats?.isNeighborhoodScoped
+                ? `Size Atanan ${stats.neighborhoods.length} Mahalle`
+                : `${stats?.neighborhoodsData?.length || 0} Mahalle`}
             </span>
           </div>
 
@@ -436,12 +450,9 @@ export default function Dashboard({ currentUser, onNavigateToMembers }) {
                         </div>
                       </td>
                       <td className="cell-full" data-label="E-posta" style={{ color: 'var(--text-muted)', fontSize: '13px' }}>{rep.user_email}</td>
-                      <td className="cell-full" data-label="Mahalle">
-                        {rep.user_neighborhood ? (
-                          <span className="neighborhood-badge">
-                            <MapPin size={11} />
-                            {rep.user_neighborhood}
-                          </span>
+                      <td className="cell-full" data-label="Mahalleler">
+                        {rep.user_neighborhoods && rep.user_neighborhoods.length > 0 ? (
+                          <NeighborhoodChips neighborhoods={rep.user_neighborhoods} />
                         ) : (
                           <span style={{ color: 'var(--text-dim)', fontSize: '13px' }}>
                             {rep.user_role === 'ADMIN' ? 'Genel Yönetici' : `${rep.user_district || 'Gölcük'} (Tüm)`}

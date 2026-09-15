@@ -5,11 +5,14 @@ export default function Header({ user, onLogout, onToggleSidebar, activeTab, onT
   if (!user) return null;
   const isAdmin = user.role === 'ADMIN';
 
+  const assigned = user.neighborhoods || [];
   const roleLabel = isAdmin
     ? 'Genel Yönetici'
-    : user.neighborhood
-      ? `${user.neighborhood} Sorumlusu`
-      : `${user.district || 'Gölcük'} Sorumlusu`;
+    : assigned.length === 1
+      ? `${assigned[0]} Sorumlusu`
+      : assigned.length > 1
+        ? `${assigned.length} Mahalle Sorumlusu`
+        : `${user.district || 'Gölcük'} Sorumlusu`;
 
   return (
     <header className="header">
@@ -51,7 +54,7 @@ export default function Header({ user, onLogout, onToggleSidebar, activeTab, onT
           <div className="user-name">{user.name}</div>
           <div className="user-role-district">
             {!isAdmin && <MapPin size={12} style={{ color: 'var(--primary)', flexShrink: 0 }} />}
-            <span>{roleLabel}</span>
+            <span title={assigned.join(', ')}>{roleLabel}</span>
           </div>
         </div>
 

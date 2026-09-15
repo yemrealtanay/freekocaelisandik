@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../utils/api';
-import { Plus, ToggleLeft, ToggleRight, Trash2, X, Shield, MapPin, Check, AlertCircle } from 'lucide-react';
+import NeighborhoodPicker, { NeighborhoodChips } from '../components/NeighborhoodPicker';
+import { Plus, Trash2, X, Shield, MapPin } from 'lucide-react';
 
 const DISTRICTS = [
-  'Gölcük', 'Başiskele', 'Çayırova', 'Darıca', 'Derince', 'Dilovası', 
+  'Gölcük', 'Başiskele', 'Çayırova', 'Darıca', 'Derince', 'Dilovası',
   'Gebze', 'İzmit', 'Kandıra', 'Karamürsel', 'Kartepe', 'Körfez'
 ];
 
@@ -12,21 +13,23 @@ export default function UsersList({ currentUser }) {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
-  
+
   // Mobile/Sub-tab state
   const [activeSubTab, setActiveSubTab] = useState('users');
   const [logs, setLogs] = useState([]);
   const [loadingLogs, setLoadingLogs] = useState(false);
-  
-  // Modal states
+
+  // Modal states (editingUser = null → create mode, otherwise assignment edit mode)
   const [modalOpen, setModalOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState(null);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState('USER');
   const [district, setDistrict] = useState('Gölcük');
-  const [neighborhood, setNeighborhood] = useState('');
+  const [selectedNeighborhoods, setSelectedNeighborhoods] = useState([]);
   const [neighborhoodOptions, setNeighborhoodOptions] = useState([]);
+  const [loadingNeighborhoodOptions, setLoadingNeighborhoodOptions] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -44,11 +47,15 @@ export default function UsersList({ currentUser }) {
   }, [modalOpen, district]);
 
   const fetchDistrictNeighborhoods = async (dist) => {
+    setLoadingNeighborhoodOptions(true);
     try {
       const data = await api.members.getNeighborhoods(dist);
       setNeighborhoodOptions(data);
     } catch (e) {
       console.error('Mahalleler yüklenemedi:', e);
+      setNeighborhoodOptions([]);
+    } finally {
+      setLoadingNeighborhoodOptions(false);
     }
   };
 
@@ -92,10 +99,34 @@ export default function UsersList({ currentUser }) {
       case 'MEMBER_DELETE': return 'Üye Silme';
       case 'EXCEL_UPLOAD': return 'Excel Yükleme';
       case 'USER_CREATE': return 'Kullanıcı Ekleme';
+      case 'USER_UPDATE': return 'Mahalle Ataması';
       case 'USER_STATUS_CHANGE': return 'Kullanıcı Durumu';
       case 'USER_DELETE': return 'Kullanıcı Silme';
       default: return type;
     }
+  };
+
+  const openCreateModal = () => {
+    setEditingUser(null);
+    setName('');
+    setEmail('');
+    setPassword('');
+    setRole('USER');
+    setDistrict('Gölcük');
+    setSelectedNeighborhoods([]);
+    setModalOpen(true);
+  };
+
+  const openAssignmentModal = (user) => {
+    setEditingUser(user);
+    setDistrict(user.district || 'Gölcük');
+    setSelectedNeighborhoods(user.neighborhoods || []);
+    setModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setModalOpen(false);
+    setEditingUser(null);
   };
 
   const handleToggleStatus = async (user) => {
@@ -103,7 +134,7 @@ export default function UsersList({ currentUser }) {
       setErrorMsg('Kendi hesabınızı pasifleştiremezsiniz.');
       return;
     }
-    
+
     setErrorMsg('');
     setSuccessMsg('');
     try {
@@ -136,9 +167,10 @@ export default function UsersList({ currentUser }) {
     }
   };
 
-  const handleCreateUser = async (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!name || !email || !password) {
+
+    if (!editingUser && (!name || !email || !password)) {
       setErrorMsg('Lütfen ad soyad, e-posta ve şifre alanlarını doldurun.');
       return;
     }
@@ -147,32 +179,33 @@ export default function UsersList({ currentUser }) {
     setErrorMsg('');
     setSuccessMsg('');
     try {
-      await api.users.create({
-        name,
-        email,
-        password,
-        role,
-        district: role === 'ADMIN' ? null : district,
-        neighborhood: role === 'ADMIN' ? null : (neighborhood || null)
-      });
-      setSuccessMsg('Mahalle sorumlusu / kullanıcı başarıyla oluşturuldu.');
-      setModalOpen(false);
-      
-      // Reset form
-      setName('');
-      setEmail('');
-      setPassword('');
-      setRole('USER');
-      setDistrict('Gölcük');
-      setNeighborhood('');
-      
+      if (editingUser) {
+        await api.users.updateAssignment(editingUser.id, {
+          district,
+          neighborhoods: selectedNeighborhoods
+        });
+        setSuccessMsg(`${editingUser.name} için mahalle ataması güncellendi.`);
+      } else {
+        await api.users.create({
+          name,
+          email,
+          password,
+          role,
+          district: role === 'ADMIN' ? null : district,
+          neighborhoods: role === 'ADMIN' ? [] : selectedNeighborhoods
+        });
+        setSuccessMsg('Mahalle sorumlusu / kullanıcı başarıyla oluşturuldu.');
+      }
+      closeModal();
       fetchUsers();
     } catch (err) {
-      setErrorMsg(err.message || 'Kullanıcı oluşturulamadı.');
+      setErrorMsg(err.message || (editingUser ? 'Mahalle ataması güncellenemedi.' : 'Kullanıcı oluşturulamadı.'));
     } finally {
       setSubmitting(false);
     }
   };
+
+  const showAssignmentFields = editingUser || role === 'USER';
 
   return (
     <div className="page-container">
@@ -180,13 +213,13 @@ export default function UsersList({ currentUser }) {
         <div className="page-title-area">
           <h2 className="page-title">{activeSubTab === 'users' ? 'Kullanıcı & Mahalle Sorumluları' : 'İşlem Günlükleri'}</h2>
           <span className="page-subtitle">
-            {activeSubTab === 'users' 
-              ? 'Saha sorumluları, mahalle temsilcileri ve sistem yöneticileri' 
+            {activeSubTab === 'users'
+              ? 'Saha sorumluları, mahalle temsilcileri ve sistem yöneticileri'
               : 'Sistem genelinde yapılan tüm saha ve üye güncellemelerinin denetim kayıtları'}
           </span>
         </div>
         {activeSubTab === 'users' && (
-          <button className="btn btn-primary hide-on-mobile" onClick={() => setModalOpen(true)}>
+          <button className="btn btn-primary hide-on-mobile" onClick={openCreateModal}>
             <Plus size={16} />
             <span>Yeni Sorumlu Ekle</span>
           </button>
@@ -195,20 +228,20 @@ export default function UsersList({ currentUser }) {
 
       {/* Mobile floating action button */}
       {activeSubTab === 'users' && (
-        <button className="fab" onClick={() => setModalOpen(true)} aria-label="Yeni Sorumlu Ekle">
+        <button className="fab" onClick={openCreateModal} aria-label="Yeni Sorumlu Ekle">
           <Plus size={24} />
         </button>
       )}
 
       {/* Sub-tab Switcher */}
       <div className="view-switcher subtab-switcher">
-        <button 
+        <button
           className={`view-btn ${activeSubTab === 'users' ? 'active' : ''}`}
           onClick={() => setActiveSubTab('users')}
         >
           Sorumlu ve Kullanıcılar
         </button>
-        <button 
+        <button
           className={`view-btn ${activeSubTab === 'logs' ? 'active' : ''}`}
           onClick={() => setActiveSubTab('logs')}
         >
@@ -242,7 +275,7 @@ export default function UsersList({ currentUser }) {
                       {u.name} {u.id === currentUser.id && <span style={{ color: 'var(--text-dim)', fontSize: '11px', fontWeight: 'normal' }}>(Siz)</span>}
                     </td>
                     <td className="cell-full" data-label="E-posta">{u.email}</td>
-                    <td data-label="Sorumluluk Alanı">
+                    <td className="cell-full" data-label="Sorumluluk Alanı">
                       {u.role === 'ADMIN' ? (
                         <span style={{ color: 'var(--text-dim)', fontSize: '13px' }}>&mdash; (Tüm İl ve İlçeler)</span>
                       ) : (
@@ -250,12 +283,11 @@ export default function UsersList({ currentUser }) {
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
                             <MapPin size={12} style={{ color: 'var(--primary)' }} />
                             {u.district || 'Gölcük'}
+                            {(!u.neighborhoods || u.neighborhoods.length === 0) && (
+                              <span style={{ color: 'var(--text-dim)', fontSize: '12px', fontWeight: 400 }}>(Tüm Mahalleler)</span>
+                            )}
                           </span>
-                          {u.neighborhood && (
-                            <span className="neighborhood-badge" style={{ width: 'fit-content', marginTop: '2px' }}>
-                              {u.neighborhood}
-                            </span>
-                          )}
+                          <NeighborhoodChips neighborhoods={u.neighborhoods} />
                         </div>
                       )}
                     </td>
@@ -272,26 +304,37 @@ export default function UsersList({ currentUser }) {
                       </span>
                     </td>
                     <td data-label="Durum">
-                      <span style={{ 
-                        color: u.status === 'ACTIVE' ? 'var(--success)' : 'var(--text-dim)', 
+                      <span style={{
+                        color: u.status === 'ACTIVE' ? 'var(--success)' : 'var(--text-dim)',
                         fontWeight: 600,
                         fontSize: '13px',
                         display: 'inline-flex',
                         alignItems: 'center',
                         gap: '6px'
                       }}>
-                        <span style={{ 
-                          width: '7px', 
-                          height: '7px', 
-                          borderRadius: '50%', 
-                          backgroundColor: u.status === 'ACTIVE' ? 'var(--success)' : 'var(--text-dim)' 
+                        <span style={{
+                          width: '7px',
+                          height: '7px',
+                          borderRadius: '50%',
+                          backgroundColor: u.status === 'ACTIVE' ? 'var(--success)' : 'var(--text-dim)'
                         }} />
                         {u.status === 'ACTIVE' ? 'Aktif' : 'Pasif'}
                       </span>
                     </td>
                     <td className="cell-actions" style={{ textAlign: 'right' }}>
                       <div style={{ display: 'inline-flex', gap: '8px', justifyContent: 'flex-end' }}>
-                        <button 
+                        {u.role === 'USER' && (
+                          <button
+                            className="btn btn-secondary"
+                            style={{ padding: '6px 12px', fontSize: '12px' }}
+                            onClick={() => openAssignmentModal(u)}
+                            title="Mahalle Ataması"
+                          >
+                            <MapPin size={13} />
+                            <span>Mahalleler</span>
+                          </button>
+                        )}
+                        <button
                           className={`btn ${u.status === 'ACTIVE' ? 'btn-secondary' : 'btn-primary'}`}
                           style={{ padding: '6px 12px', fontSize: '12px' }}
                           onClick={() => handleToggleStatus(u)}
@@ -299,7 +342,7 @@ export default function UsersList({ currentUser }) {
                         >
                           {u.status === 'ACTIVE' ? 'Pasife Al' : 'Aktif Et'}
                         </button>
-                        <button 
+                        <button
                           className="btn btn-danger"
                           style={{ padding: '6px 10px', borderRadius: 'var(--radius-sm)' }}
                           onClick={() => handleDeleteUser(u)}
@@ -361,68 +404,80 @@ export default function UsersList({ currentUser }) {
         )
       )}
 
-      {/* User Creation Modal */}
+      {/* User Creation / Neighborhood Assignment Modal */}
       {modalOpen && (
-        <div className="modal-backdrop" onClick={() => setModalOpen(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+        <div className="modal-backdrop" onClick={closeModal}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '520px' }}>
             <div className="sheet-handle" />
             <div className="modal-header">
-              <h3 style={{ fontSize: '18px', fontWeight: 700 }}>Yeni Sorumlu Ekle</h3>
-              <button className="drawer-close" onClick={() => setModalOpen(false)}>
+              <h3 style={{ fontSize: '18px', fontWeight: 700 }}>
+                {editingUser ? 'Mahalle Ataması' : 'Yeni Sorumlu Ekle'}
+              </h3>
+              <button className="drawer-close" onClick={closeModal}>
                 <X size={18} />
               </button>
             </div>
-            <form onSubmit={handleCreateUser}>
+            <form onSubmit={handleSubmit}>
               <div className="modal-body">
-                <div className="form-group">
-                  <label>Ad Soyad <span style={{ color: 'var(--danger)' }}>*</span></label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="Ahmet Yılmaz"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    required
-                  />
-                </div>
+                {editingUser ? (
+                  <div className="assignment-target">
+                    <div style={{ fontWeight: 600, color: 'var(--text-main)' }}>{editingUser.name}</div>
+                    <div style={{ color: 'var(--text-muted)', marginTop: '2px' }}>{editingUser.email}</div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="form-group">
+                      <label>Ad Soyad <span style={{ color: 'var(--danger)' }}>*</span></label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="Ahmet Yılmaz"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        required
+                      />
+                    </div>
 
-                <div className="form-group">
-                  <label>E-posta (Giriş için) <span style={{ color: 'var(--danger)' }}>*</span></label>
-                  <input
-                    type="email"
-                    className="form-control"
-                    placeholder="ahmet@kocaeli-saha.local"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                  />
-                </div>
+                    <div className="form-group">
+                      <label>E-posta (Giriş için) <span style={{ color: 'var(--danger)' }}>*</span></label>
+                      <input
+                        type="email"
+                        className="form-control"
+                        placeholder="ahmet@kocaeli-saha.local"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        required
+                      />
+                    </div>
 
-                <div className="form-group">
-                  <label>Şifre <span style={{ color: 'var(--danger)' }}>*</span></label>
-                  <input
-                    type="password"
-                    className="form-control"
-                    placeholder="Şifre belirleyin"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                  />
-                </div>
+                    <div className="form-group">
+                      <label>Şifre <span style={{ color: 'var(--danger)' }}>*</span></label>
+                      <input
+                        type="password"
+                        className="form-control"
+                        placeholder="Şifre belirleyin"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        autoComplete="new-password"
+                        required
+                      />
+                    </div>
 
-                <div className="form-group">
-                  <label>Kullanıcı Rolü</label>
-                  <select 
-                    className="form-control"
-                    value={role}
-                    onChange={(e) => setRole(e.target.value)}
-                  >
-                    <option value="USER">Mahalle Sorumlusu (Saha Kullanıcısı)</option>
-                    <option value="ADMIN">Genel Yönetici (Admin)</option>
-                  </select>
-                </div>
+                    <div className="form-group">
+                      <label>Kullanıcı Rolü</label>
+                      <select
+                        className="form-control"
+                        value={role}
+                        onChange={(e) => setRole(e.target.value)}
+                      >
+                        <option value="USER">Mahalle Sorumlusu (Saha Kullanıcısı)</option>
+                        <option value="ADMIN">Genel Yönetici (Admin)</option>
+                      </select>
+                    </div>
+                  </>
+                )}
 
-                {role === 'USER' && (
+                {showAssignmentFields && (
                   <>
                     <div className="form-group">
                       <label>Görevli Olduğu İlçe</label>
@@ -431,7 +486,7 @@ export default function UsersList({ currentUser }) {
                         value={district}
                         onChange={(e) => {
                           setDistrict(e.target.value);
-                          setNeighborhood('');
+                          setSelectedNeighborhoods([]);
                         }}
                       >
                         {DISTRICTS.map(d => (
@@ -440,33 +495,29 @@ export default function UsersList({ currentUser }) {
                       </select>
                     </div>
 
-                    <div className="form-group">
-                      <label>Sorumlu Olduğu Mahalle</label>
-                      <select
-                        className="form-control"
-                        value={neighborhood}
-                        onChange={(e) => setNeighborhood(e.target.value)}
-                      >
-                        <option value="">-- Tüm Mahalleler (Genel Saha) --</option>
-                        {neighborhoodOptions.map(n => (
-                          <option key={n.neighborhood} value={n.neighborhood}>
-                            {n.neighborhood} ({n.count} üye)
-                          </option>
-                        ))}
-                      </select>
-                      <span style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '4px', display: 'block' }}>
-                        Mahalle seçildiğinde bu sorumlu doğrudan kendi mahallesine ait üyeleri görecektir.
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label>Sorumlu Olduğu Mahalleler</label>
+                      <NeighborhoodPicker
+                        options={neighborhoodOptions}
+                        value={selectedNeighborhoods}
+                        onChange={setSelectedNeighborhoods}
+                        loading={loadingNeighborhoodOptions}
+                      />
+                      <span style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '8px', display: 'block' }}>
+                        Sorumlu sadece seçilen mahallelerdeki üyeleri görür ve günceller. Hiç seçim yapılmazsa ilçenin tamamına erişir.
                       </span>
                     </div>
                   </>
                 )}
               </div>
               <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={() => setModalOpen(false)}>
+                <button type="button" className="btn btn-secondary" onClick={closeModal}>
                   Vazgeç
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={submitting}>
-                  {submitting ? 'Oluşturuluyor...' : 'Sorumlu Hesabı Oluştur'}
+                  {editingUser
+                    ? (submitting ? 'Kaydediliyor...' : 'Atamayı Kaydet')
+                    : (submitting ? 'Oluşturuluyor...' : 'Sorumlu Hesabı Oluştur')}
                 </button>
               </div>
             </form>

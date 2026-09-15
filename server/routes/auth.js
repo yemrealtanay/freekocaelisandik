@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const { getDb } = require('../db');
-const { generateToken, requireAuth } = require('../auth');
+const { generateToken, getUserNeighborhoods, requireAuth } = require('../auth');
 
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
@@ -30,6 +30,7 @@ router.post('/login', async (req, res) => {
     }
 
     const token = generateToken(user);
+    const neighborhoods = user.role === 'USER' ? await getUserNeighborhoods(db, user.id) : [];
     res.json({
       token,
       user: {
@@ -38,7 +39,7 @@ router.post('/login', async (req, res) => {
         email: user.email,
         role: user.role,
         district: user.district,
-        neighborhood: user.neighborhood || null
+        neighborhoods
       }
     });
   } catch (error) {
@@ -48,24 +49,9 @@ router.post('/login', async (req, res) => {
 });
 
 // GET /api/auth/me
-router.get('/me', requireAuth, async (req, res) => {
-  try {
-    const db = await getDb();
-    const user = await db.get('SELECT id, name, email, role, district, neighborhood, status FROM users WHERE id = ?', [req.user.id]);
-    
-    if (!user) {
-      return res.status(404).json({ message: 'Kullanıcı bulunamadı.' });
-    }
-
-    if (user.status !== 'ACTIVE') {
-      return res.status(403).json({ message: 'Hesabınız aktif değil.' });
-    }
-
-    res.json({ user });
-  } catch (error) {
-    console.error('Auth me error:', error);
-    res.status(500).json({ message: 'Sunucu hatası oluştu.' });
-  }
+// requireAuth already loads the user fresh from the DB (incl. status and neighborhoods)
+router.get('/me', requireAuth, (req, res) => {
+  res.json({ user: req.user });
 });
 
 module.exports = router;

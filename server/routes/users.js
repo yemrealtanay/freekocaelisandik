@@ -2,15 +2,40 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const { getDb, dbPath } = require('../db');
-const { requireAdmin } = require('../auth');
+const { requireAdmin, requireAuth } = require('../auth');
 const { logAction } = require('../logger');
+
+// Accepts an array (or a legacy single string) and returns unique, trimmed neighborhood names
+function normalizeNeighborhoods(input) {
+  const list = Array.isArray(input) ? input : (input ? [input] : []);
+  return [...new Set(list.map(n => (n || '').toString().trim()).filter(Boolean))];
+}
+
+async function setUserNeighborhoods(db, userId, neighborhoods) {
+  await db.run('DELETE FROM user_neighborhoods WHERE user_id = ?', [userId]);
+  if (neighborhoods.length === 0) return;
+  const placeholders = neighborhoods.map(() => '(?, ?)').join(', ');
+  const params = neighborhoods.flatMap(n => [userId, n]);
+  await db.run(`INSERT INTO user_neighborhoods (user_id, neighborhood) VALUES ${placeholders}`, params);
+}
+
+function describeNeighborhoods(neighborhoods) {
+  return neighborhoods.length ? neighborhoods.join(', ') : 'Tümü';
+}
 
 // GET /api/users (List users, Admin only)
 router.get('/', requireAdmin, async (req, res) => {
   try {
     const db = await getDb();
-    const users = await db.all('SELECT id, name, email, district, neighborhood, role, status, created_at FROM users ORDER BY created_at DESC');
-    res.json(users);
+    const users = await db.all('SELECT id, name, email, district, role, status, created_at FROM users ORDER BY created_at DESC');
+    const assignments = await db.all('SELECT user_id, neighborhood FROM user_neighborhoods ORDER BY neighborhood ASC');
+
+    const byUser = {};
+    assignments.forEach(a => {
+      (byUser[a.user_id] = byUser[a.user_id] || []).push(a.neighborhood);
+    });
+
+    res.json(users.map(u => ({ ...u, neighborhoods: byUser[u.id] || [] })));
   } catch (error) {
     console.error('List users error:', error);
     res.status(500).json({ message: 'Kullanıcılar listelenirken hata oluştu.' });
@@ -19,7 +44,7 @@ router.get('/', requireAdmin, async (req, res) => {
 
 // POST /api/users (Create user, Admin only)
 router.post('/', requireAdmin, async (req, res) => {
-  const { name, email, password, district, neighborhood, role } = req.body;
+  const { name, email, password, district, neighborhoods, neighborhood, role } = req.body;
 
   if (!name || !email || !password || !role) {
     return res.status(400).json({ message: 'Ad soyad, e-posta, şifre ve rol zorunludur.' });
@@ -35,22 +60,67 @@ router.post('/', requireAdmin, async (req, res) => {
     const userId = 'user-' + Math.random().toString(36).substr(2, 9);
     const passwordHash = await bcrypt.hash(password, 10);
     const userDistrict = role === 'ADMIN' ? null : (district || 'Gölcük');
-    const userNeighborhood = role === 'ADMIN' ? null : (neighborhood || null);
+    const userNeighborhoods = role === 'ADMIN'
+      ? []
+      : normalizeNeighborhoods(neighborhoods !== undefined ? neighborhoods : neighborhood);
 
     await db.run(
-      'INSERT INTO users (id, name, email, password_hash, district, neighborhood, role, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [userId, name, email, passwordHash, userDistrict, userNeighborhood, role, 'ACTIVE']
+      'INSERT INTO users (id, name, email, password_hash, district, role, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [userId, name, email, passwordHash, userDistrict, role, 'ACTIVE']
     );
+    await setUserNeighborhoods(db, userId, userNeighborhoods);
 
-    await logAction(req, 'USER_CREATE', `${name} (${email}) kullanıcısı oluşturuldu. Rol: ${role}, İlçe: ${userDistrict || 'Hepsi'}, Mahalle: ${userNeighborhood || 'Tümü'}`);
+    await logAction(req, 'USER_CREATE', `${name} (${email}) kullanıcısı oluşturuldu. Rol: ${role}, İlçe: ${userDistrict || 'Hepsi'}, Mahalleler: ${describeNeighborhoods(userNeighborhoods)}`);
 
     res.status(201).json({
       message: 'Kullanıcı başarıyla oluşturuldu.',
-      user: { id: userId, name, email, district: userDistrict, neighborhood: userNeighborhood, role, status: 'ACTIVE' }
+      user: { id: userId, name, email, district: userDistrict, neighborhoods: userNeighborhoods, role, status: 'ACTIVE' }
     });
   } catch (error) {
     console.error('Create user error:', error);
     res.status(500).json({ message: 'Kullanıcı oluşturulurken hata oluştu.' });
+  }
+});
+
+// PUT /api/users/:id/assignment (Update representative district & neighborhoods, Admin only)
+router.put('/:id/assignment', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { district, neighborhoods } = req.body;
+
+  if (!Array.isArray(neighborhoods)) {
+    return res.status(400).json({ message: 'Mahalle listesi geçersiz.' });
+  }
+
+  try {
+    const db = await getDb();
+    const target = await db.get('SELECT id, name, email, role, district FROM users WHERE id = ?', [id]);
+
+    if (!target) {
+      return res.status(404).json({ message: 'Kullanıcı bulunamadı.' });
+    }
+
+    if (target.role !== 'USER') {
+      return res.status(400).json({ message: 'Mahalle ataması sadece mahalle sorumlularına yapılabilir.' });
+    }
+
+    const newDistrict = district || target.district || 'Gölcük';
+    const newNeighborhoods = normalizeNeighborhoods(neighborhoods);
+
+    await db.run(
+      'UPDATE users SET district = ?, neighborhood = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      [newDistrict, id]
+    );
+    await setUserNeighborhoods(db, id, newNeighborhoods);
+
+    await logAction(req, 'USER_UPDATE', `${target.name} (${target.email}) mahalle ataması güncellendi. İlçe: ${newDistrict}, Mahalleler: ${describeNeighborhoods(newNeighborhoods)}`);
+
+    res.json({
+      message: 'Mahalle ataması güncellendi.',
+      user: { id, district: newDistrict, neighborhoods: newNeighborhoods }
+    });
+  } catch (error) {
+    console.error('Update assignment error:', error);
+    res.status(500).json({ message: 'Mahalle ataması güncellenemedi.' });
   }
 });
 
@@ -74,7 +144,7 @@ router.patch('/:id/status', requireAdmin, async (req, res) => {
     if (result.changes === 0) {
       return res.status(404).json({ message: 'Kullanıcı bulunamadı.' });
     }
-    
+
     if (targetUser) {
       await logAction(req, 'USER_STATUS_CHANGE', `${targetUser.name} (${targetUser.email}) kullanıcısının durumu ${status === 'ACTIVE' ? 'Aktif' : 'Pasif'} yapıldı.`);
     }
@@ -114,7 +184,6 @@ router.delete('/:id', requireAdmin, async (req, res) => {
 });
 
 // GET /api/users/dashboard-stats (Get DB statistics, Available to authenticated users)
-const { requireAuth } = require('../auth');
 router.get('/dashboard-stats', requireAuth, async (req, res) => {
   try {
     const db = await getDb();
@@ -127,14 +196,14 @@ router.get('/dashboard-stats', requireAuth, async (req, res) => {
     }
 
     const isUser = req.user.role === 'USER';
-    const userNeighborhood = isUser ? req.user.neighborhood : null;
+    const scopedNeighborhoods = isUser ? (req.user.neighborhoods || []) : [];
 
     let whereClause = 'district = ?';
     let queryParams = [district];
 
-    if (userNeighborhood) {
-      whereClause += ' AND neighborhood = ?';
-      queryParams.push(userNeighborhood);
+    if (scopedNeighborhoods.length) {
+      whereClause += ` AND neighborhood IN (${scopedNeighborhoods.map(() => '?').join(', ')})`;
+      queryParams.push(...scopedNeighborhoods);
     }
 
     // 1. Total User Count (Admin only)
@@ -143,8 +212,8 @@ router.get('/dashboard-stats', requireAuth, async (req, res) => {
       const userCount = await db.get('SELECT COUNT(*) as count FROM users');
       totalUsers = userCount ? userCount.count : 0;
     }
-    
-    // 2. Total Member Count for target district/neighborhood
+
+    // 2. Total Member Count for target district/neighborhoods
     const memberCount = await db.get(
       `SELECT COUNT(*) as count FROM members WHERE ${whereClause}`,
       queryParams
@@ -172,7 +241,7 @@ router.get('/dashboard-stats', requireAuth, async (req, res) => {
 
     // 4. Contacted vs Not Contacted
     const contactedResult = await db.get(
-      `SELECT COUNT(*) as count FROM members 
+      `SELECT COUNT(*) as count FROM members
        WHERE ${whereClause} AND (contact_status = 'GORUSULDU' OR vote_stance IN ('DESTEKLIYOR', 'KARARSIZ', 'MESAFELI'))`,
       queryParams
     );
@@ -182,7 +251,7 @@ router.get('/dashboard-stats', requireAuth, async (req, res) => {
 
     // 5. Neighborhood Breakdown
     const neighborhoodRows = await db.all(`
-      SELECT 
+      SELECT
         neighborhood,
         COUNT(*) as total_members,
         SUM(CASE WHEN contact_status = 'GORUSULDU' OR vote_stance IN ('DESTEKLIYOR', 'KARARSIZ', 'MESAFELI') THEN 1 ELSE 0 END) as contacted_count,
@@ -190,7 +259,7 @@ router.get('/dashboard-stats', requireAuth, async (req, res) => {
         SUM(CASE WHEN vote_stance = 'KARARSIZ' THEN 1 ELSE 0 END) as kararsiz_count,
         SUM(CASE WHEN vote_stance = 'MESAFELI' THEN 1 ELSE 0 END) as mesafeli_count,
         SUM(CASE WHEN vote_stance = 'BELIRTILMEDI' OR vote_stance IS NULL THEN 1 ELSE 0 END) as belirtilmedi_count
-      FROM members 
+      FROM members
       WHERE ${whereClause} AND neighborhood IS NOT NULL AND neighborhood != ''
       GROUP BY neighborhood
       ORDER BY total_members DESC, neighborhood ASC
@@ -199,11 +268,11 @@ router.get('/dashboard-stats', requireAuth, async (req, res) => {
     // 6. Representative Activity Statistics
     // Admins see all representatives. Mahalle Sorumlulari only see their own performance.
     let repQuery = `
-      SELECT 
-        u.id as user_id, 
-        u.name as user_name, 
-        u.email as user_email, 
-        u.neighborhood as user_neighborhood, 
+      SELECT
+        u.id as user_id,
+        u.name as user_name,
+        u.email as user_email,
+        (SELECT GROUP_CONCAT(un.neighborhood, '||') FROM user_neighborhoods un WHERE un.user_id = u.id) as user_neighborhoods_raw,
         u.district as user_district,
         u.role as user_role,
         COUNT(t.id) as total_interactions,
@@ -220,12 +289,15 @@ router.get('/dashboard-stats', requireAuth, async (req, res) => {
     }
 
     repQuery += ' GROUP BY u.id ORDER BY total_interactions DESC, u.name ASC';
-    const representativeRows = await db.all(repQuery, repParams);
+    const representativeRows = (await db.all(repQuery, repParams)).map(({ user_neighborhoods_raw, ...rep }) => ({
+      ...rep,
+      user_neighborhoods: user_neighborhoods_raw ? user_neighborhoods_raw.split('||').sort() : []
+    }));
 
     res.json({
       district,
-      neighborhood: userNeighborhood || null,
-      isNeighborhoodScoped: !!userNeighborhood,
+      neighborhoods: scopedNeighborhoods,
+      isNeighborhoodScoped: scopedNeighborhoods.length > 0,
       totalUsers,
       totalMembers,
       contactedMembers,

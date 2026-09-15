@@ -1,24 +1,32 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const { getDb } = require('./db');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'kocaeli_uye_yonetim_sistemi_secret_key_12345';
 
 function generateToken(user) {
+  // Only identity goes into the token; district/neighborhood scope is loaded fresh on every request
   return jwt.sign(
     {
       id: user.id,
       email: user.email,
       name: user.name,
-      role: user.role,
-      district: user.district,
-      neighborhood: user.neighborhood || null
+      role: user.role
     },
     JWT_SECRET,
     { expiresIn: '7d' }
   );
 }
 
-function requireAuth(req, res, next) {
+async function getUserNeighborhoods(db, userId) {
+  const rows = await db.all(
+    'SELECT neighborhood FROM user_neighborhoods WHERE user_id = ? ORDER BY neighborhood ASC',
+    [userId]
+  );
+  return rows.map(r => r.neighborhood);
+}
+
+async function requireAuth(req, res, next) {
   let token = null;
 
   // Extract from Authorization header
@@ -39,12 +47,27 @@ function requireAuth(req, res, next) {
     return res.status(401).json({ message: 'Yetkilendirme hatası: Giriş yapmalısınız.' });
   }
 
+  let decoded;
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = decoded;
-    next();
+    decoded = jwt.verify(token, JWT_SECRET);
   } catch (error) {
     return res.status(401).json({ message: 'Geçersiz veya süresi dolmuş oturum.' });
+  }
+
+  try {
+    const db = await getDb();
+    const user = await db.get('SELECT id, name, email, role, district, status FROM users WHERE id = ?', [decoded.id]);
+
+    if (!user || user.status !== 'ACTIVE') {
+      return res.status(401).json({ message: 'Oturumunuz geçersiz veya hesabınız aktif değil.' });
+    }
+
+    user.neighborhoods = user.role === 'USER' ? await getUserNeighborhoods(db, user.id) : [];
+    req.user = user;
+    next();
+  } catch (error) {
+    console.error('Auth user load error:', error);
+    return res.status(500).json({ message: 'Sunucu hatası oluştu.' });
   }
 }
 
@@ -59,6 +82,7 @@ function requireAdmin(req, res, next) {
 
 module.exports = {
   generateToken,
+  getUserNeighborhoods,
   requireAuth,
   requireAdmin
 };

@@ -40,6 +40,24 @@ function checkDistrictAccess(user, district) {
   return user.district === district;
 }
 
+// Neighborhoods assigned to a representative; an empty list means the whole district
+function getScopedNeighborhoods(user) {
+  return user.role === 'USER' && Array.isArray(user.neighborhoods) ? user.neighborhoods : [];
+}
+
+function canAccessNeighborhood(user, neighborhood) {
+  const scoped = getScopedNeighborhoods(user);
+  return scoped.length === 0 || scoped.includes(neighborhood);
+}
+
+function checkMemberAccess(user, member) {
+  return checkDistrictAccess(user, member.district) && canAccessNeighborhood(user, member.neighborhood);
+}
+
+function inPlaceholders(list) {
+  return list.map(() => '?').join(', ');
+}
+
 // GET /api/members/neighborhoods (List neighborhoods with counts, Scoped)
 router.get('/neighborhoods', requireAuth, async (req, res) => {
   let { district } = req.query;
@@ -58,9 +76,10 @@ router.get('/neighborhoods', requireAuth, async (req, res) => {
     `;
     const params = [district];
 
-    if (req.user.role === 'USER' && req.user.neighborhood) {
-      query += ' AND neighborhood = ?';
-      params.push(req.user.neighborhood);
+    const scopedNeighborhoods = getScopedNeighborhoods(req.user);
+    if (scopedNeighborhoods.length) {
+      query += ` AND neighborhood IN (${inPlaceholders(scopedNeighborhoods)})`;
+      params.push(...scopedNeighborhoods);
     }
 
     query += ' GROUP BY neighborhood ORDER BY neighborhood ASC';
@@ -78,10 +97,12 @@ router.get('/', requireAuth, async (req, res) => {
   let { district, role, search, neighborhood, vote_stance, contact_status } = req.query;
 
   // Enforce district & neighborhood access
+  const scopedNeighborhoods = getScopedNeighborhoods(req.user);
   if (req.user.role === 'USER') {
     district = req.user.district || 'Gölcük';
-    if (req.user.neighborhood) {
-      neighborhood = req.user.neighborhood;
+    // A specific neighborhood filter must be one of the assigned ones
+    if (scopedNeighborhoods.length && neighborhood && !scopedNeighborhoods.includes(neighborhood)) {
+      neighborhood = 'TUM';
     }
   } else if (!district) {
     district = 'Gölcük';
@@ -107,6 +128,11 @@ router.get('/', requireAuth, async (req, res) => {
     if (neighborhood && neighborhood !== 'TUM' && neighborhood !== 'ALL') {
       query += ' AND m.neighborhood = ?';
       params.push(neighborhood);
+    }
+
+    if (scopedNeighborhoods.length) {
+      query += ` AND m.neighborhood IN (${inPlaceholders(scopedNeighborhoods)})`;
+      params.push(...scopedNeighborhoods);
     }
 
     if (vote_stance && vote_stance !== 'TUM' && vote_stance !== 'ALL') {
@@ -159,6 +185,10 @@ router.get('/', requireAuth, async (req, res) => {
       countQuery += ' AND neighborhood = ?';
       countParams.push(neighborhood);
     }
+    if (scopedNeighborhoods.length) {
+      countQuery += ` AND neighborhood IN (${inPlaceholders(scopedNeighborhoods)})`;
+      countParams.push(...scopedNeighborhoods);
+    }
     const totalInFilter = await db.get(countQuery, countParams);
 
     res.json({
@@ -182,6 +212,10 @@ router.post('/', requireAuth, async (req, res) => {
 
   if (!checkDistrictAccess(req.user, district)) {
     return res.status(403).json({ message: 'Bu ilçeye üye ekleme yetkiniz bulunmamaktadır.' });
+  }
+
+  if (!canAccessNeighborhood(req.user, (neighborhood || '').trim())) {
+    return res.status(403).json({ message: 'Sadece size atanmış mahallelerden birine üye ekleyebilirsiniz.' });
   }
 
   try {
@@ -261,8 +295,12 @@ router.put('/:id', requireAuth, async (req, res) => {
       return res.status(403).json({ message: 'Bu üyenin bilgilerini değiştirme yetkiniz bulunmamaktadır.' });
     }
 
-    if (req.user.role === 'USER' && req.user.neighborhood && member.neighborhood && member.neighborhood !== req.user.neighborhood) {
-      return res.status(403).json({ message: 'Sadece kendi mahallenizdeki üyeleri güncelleyebilirsiniz.' });
+    if (!canAccessNeighborhood(req.user, member.neighborhood)) {
+      return res.status(403).json({ message: 'Sadece size atanmış mahallelerdeki üyeleri güncelleyebilirsiniz.' });
+    }
+
+    if (neighborhood !== undefined && neighborhood !== member.neighborhood && !canAccessNeighborhood(req.user, neighborhood)) {
+      return res.status(403).json({ message: 'Üyeyi size atanmamış bir mahalleye taşıyamazsınız.' });
     }
 
     const today = new Date().toISOString().split('T')[0];
@@ -382,13 +420,13 @@ router.get('/:id/timeline', requireAuth, async (req, res) => {
 
   try {
     const db = await getDb();
-    const member = await db.get('SELECT district FROM members WHERE id = ?', [id]);
+    const member = await db.get('SELECT district, neighborhood FROM members WHERE id = ?', [id]);
 
     if (!member) {
       return res.status(404).json({ message: 'Üye bulunamadı.' });
     }
 
-    if (!checkDistrictAccess(req.user, member.district)) {
+    if (!checkMemberAccess(req.user, member)) {
       return res.status(403).json({ message: 'Bu üyenin bilgilerini görme yetkiniz bulunmamaktadır.' });
     }
 
@@ -419,13 +457,13 @@ router.post('/:id/timeline', requireAuth, async (req, res) => {
 
   try {
     const db = await getDb();
-    const member = await db.get('SELECT district FROM members WHERE id = ?', [id]);
+    const member = await db.get('SELECT district, neighborhood FROM members WHERE id = ?', [id]);
 
     if (!member) {
       return res.status(404).json({ message: 'Üye bulunamadı.' });
     }
 
-    if (!checkDistrictAccess(req.user, member.district)) {
+    if (!checkMemberAccess(req.user, member)) {
       return res.status(403).json({ message: 'Bu üyeye not ekleme yetkiniz bulunmamaktadır.' });
     }
 
@@ -451,13 +489,13 @@ router.delete('/:id', requireAuth, async (req, res) => {
 
   try {
     const db = await getDb();
-    const member = await db.get('SELECT district FROM members WHERE id = ?', [id]);
+    const member = await db.get('SELECT district, neighborhood FROM members WHERE id = ?', [id]);
 
     if (!member) {
       return res.status(404).json({ message: 'Üye bulunamadı.' });
     }
 
-    if (!checkDistrictAccess(req.user, member.district)) {
+    if (!checkMemberAccess(req.user, member)) {
       return res.status(403).json({ message: 'Bu üyeyi silme yetkiniz bulunmamaktadır.' });
     }
 

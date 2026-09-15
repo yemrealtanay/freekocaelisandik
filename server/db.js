@@ -301,6 +301,36 @@ async function getDb() {
     console.error('Failed to run migration v4:', err);
   }
 
+  // Migration v5: Multiple neighborhoods per representative
+  try {
+    await db.exec(`
+      CREATE TABLE IF NOT EXISTS user_neighborhoods (
+        user_id TEXT NOT NULL,
+        neighborhood TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (user_id, neighborhood),
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_user_neighborhoods_neighborhood ON user_neighborhoods(neighborhood);
+    `);
+
+    const migrationCheck = await db.get("SELECT value FROM settings WHERE key = 'user_neighborhoods_migration_v5'");
+    if (!migrationCheck) {
+      // Copy legacy single users.neighborhood assignments into the new table
+      const result = await db.run(`
+        INSERT OR IGNORE INTO user_neighborhoods (user_id, neighborhood)
+        SELECT id, TRIM(neighborhood) FROM users
+        WHERE role = 'USER' AND neighborhood IS NOT NULL AND TRIM(neighborhood) != ''
+      `);
+      await db.run("UPDATE users SET neighborhood = NULL WHERE neighborhood IS NOT NULL");
+      await db.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('user_neighborhoods_migration_v5', 'true')");
+      console.log(`Migrating: Copied ${result.changes} legacy neighborhood assignments to user_neighborhoods.`);
+    }
+  } catch (err) {
+    console.error('Failed to run user_neighborhoods migration v5:', err);
+  }
+
   // Bootstrap the initial admin only from environment variables (no hardcoded credentials)
   const adminEmail = (process.env.ADMIN_EMAIL || '').trim().toLowerCase();
   const adminPassword = process.env.ADMIN_PASSWORD || '';

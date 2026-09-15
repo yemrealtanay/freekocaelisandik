@@ -94,6 +94,10 @@ export const api = {
     delete: (id) => request(`/api/users/${id}`, {
       method: 'DELETE'
     }),
+    updateAssignment: (id, { district, neighborhoods }) => request(`/api/users/${id}/assignment`, {
+      method: 'PUT',
+      body: JSON.stringify({ district, neighborhoods })
+    }),
     downloadDatabase: async () => {
       const response = await fetch('/api/users/download-db', {
         headers: {
