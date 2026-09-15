@@ -61,6 +61,12 @@ Web servisinizin **Variables** sekmesine gidin ve aşağıdaki değişkenleri ek
 | `DATA_DIR` | `/data` | Kalıcı Volume yolu (SQLite buraya yazılır) |
 | `DB_PATH` | `/data/db.sqlite` | SQLite veritabanı dosyasının tam yolu |
 | `PORT` | *(Railway otomatik atar)* | Manuel girmeye gerek yoktur |
+| `ADMIN_EMAIL` | `sizin@eposta-adresiniz` | İlk Genel Yönetici hesabının e-postası |
+| `ADMIN_PASSWORD` | *(en az 10 karakter, güçlü bir şifre)* | İlk Genel Yönetici hesabının şifresi |
+| `ADMIN_NAME` | `Genel Yönetici` | *(Opsiyonel)* Admin görünen adı |
+
+> [!WARNING]
+> `ADMIN_EMAIL` / `ADMIN_PASSWORD` sadece bu e-postaya ait kullanıcı **yoksa** hesap oluşturmak için kullanılır. Mevcut hesabın şifresini değiştirmez. Hesap oluştuktan sonra `ADMIN_PASSWORD` değişkenini silebilirsiniz.
 
 ---
 
@@ -77,22 +83,13 @@ Web servisinizin **Variables** sekmesine gidin ve aşağıdaki değişkenleri ek
 
 Railway deploy tamamlandığında sunucu ilk kez başladığında otomatik olarak:
 - Tabloları ve indeksleri oluşturur.
-- Varsayılan **Genel Yönetici (Admin)** hesabını tanımlar.
+- `ADMIN_EMAIL` ve `ADMIN_PASSWORD` tanımlıysa ilk **Genel Yönetici (Admin)** hesabını oluşturur.
 
-### Varsayılan Giriş Bilgileri:
-
-#### 1. Genel Yönetici (Admin):
-- **E-posta**: `admin@kocaeli-org.local`
-- **Şifre**: `admin123`
-- *(Tüm ilçeleri, 50 mahalleyi, 1.617 üyeyi ve tüm sorumluları görür)*
-
-#### 2. Örnek Mahalle Sorumlusu (Değirmendere Merkez):
-- **E-posta**: `sorumlu@kocaeli-org.local`
-- **Şifre**: `sorumlu123`
-- *(Yalnızca Değirmendere Merkez Mahallesindeki 150 üyeyi ve istatistikleri görür)*
+> [!IMPORTANT]
+> Sistemde sabit/varsayılan şifreli hesap bulunmaz. Admin girişi, 4. adımda tanımladığınız `ADMIN_EMAIL` ve `ADMIN_PASSWORD` bilgileriyle yapılır. Mahalle sorumlusu hesapları admin panelinden açılır (bkz. 7. adım).
 
 ### Üye Listesini Aktarma:
-1. Sisteme admin olarak giriş yapın.
+1. `ADMIN_EMAIL` / `ADMIN_PASSWORD` bilgileriyle admin olarak giriş yapın.
 2. Sol menüden (mobilde alt menüden) **Excel Yükle** sayfasına gidin.
 3. Hedef İlçe olarak **Gölcük** seçin.
 4. `example_excel/Kocaeli Golcuk Member List.xlsx` dosyasını yükleyin.

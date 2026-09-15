@@ -301,28 +301,30 @@ async function getDb() {
     console.error('Failed to run migration v4:', err);
   }
 
-  // Seed default admin user if not exists
-  const adminExists = await db.get('SELECT * FROM users WHERE email = ?', ['admin@kocaeli-org.local']);
-  if (!adminExists) {
-    const adminId = 'admin-' + Math.random().toString(36).substr(2, 9);
-    const passwordHash = await bcrypt.hash('admin123', 10);
-    await db.run(
-      'INSERT INTO users (id, name, email, password_hash, district, role, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [adminId, 'Admin Kullanıcı', 'admin@kocaeli-org.local', passwordHash, null, 'ADMIN', 'ACTIVE']
-    );
-    console.log('Seeded default admin user successfully.');
-  }
+  // Bootstrap the initial admin only from environment variables (no hardcoded credentials)
+  const adminEmail = (process.env.ADMIN_EMAIL || '').trim().toLowerCase();
+  const adminPassword = process.env.ADMIN_PASSWORD || '';
 
-  // Seed default mahalle sorumlusu user if not exists
-  const repExists = await db.get('SELECT * FROM users WHERE email = ?', ['sorumlu@kocaeli-org.local']);
-  if (!repExists) {
-    const repId = 'user-' + Math.random().toString(36).substr(2, 9);
-    const passwordHash = await bcrypt.hash('sorumlu123', 10);
-    await db.run(
-      'INSERT INTO users (id, name, email, password_hash, district, neighborhood, role, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [repId, 'Ahmet Yılmaz (Mahalle Sorumlusu)', 'sorumlu@kocaeli-org.local', passwordHash, 'Gölcük', 'DEĞİRMENDERE MERKEZ MAH.', 'USER', 'ACTIVE']
-    );
-    console.log('Seeded default mahalle sorumlusu successfully.');
+  if (adminEmail && adminPassword) {
+    if (adminPassword.length < 10) {
+      console.error('ADMIN_PASSWORD must be at least 10 characters. Initial admin was NOT created.');
+    } else {
+      const adminExists = await db.get('SELECT id FROM users WHERE email = ?', [adminEmail]);
+      if (!adminExists) {
+        const adminId = 'admin-' + Math.random().toString(36).substr(2, 9);
+        const passwordHash = await bcrypt.hash(adminPassword, 10);
+        await db.run(
+          'INSERT INTO users (id, name, email, password_hash, district, role, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [adminId, process.env.ADMIN_NAME || 'Genel Yönetici', adminEmail, passwordHash, null, 'ADMIN', 'ACTIVE']
+        );
+        console.log(`Initial admin user created: ${adminEmail}`);
+      }
+    }
+  } else {
+    const anyAdmin = await db.get("SELECT id FROM users WHERE role = 'ADMIN' AND status = 'ACTIVE' LIMIT 1");
+    if (!anyAdmin) {
+      console.warn('No active admin user found. Set ADMIN_EMAIL and ADMIN_PASSWORD env variables and restart to create one.');
+    }
   }
 
   return db;

@@ -106,47 +106,6 @@ export default function Login({ onLoginSuccess }) {
             {loading ? 'Giriş yapılıyor...' : 'Giriş Yap'}
           </button>
         </form>
-
-        {/* Quick Demo Credentials */}
-        <div style={{ 
-          marginTop: '24px', 
-          padding: '16px', 
-          backgroundColor: 'var(--bg-app)', 
-          borderRadius: 'var(--radius-md)', 
-          border: '1px solid var(--border-color)',
-          fontSize: '13px'
-        }}>
-          <div style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '8px' }}>
-            Hızlı Giriş Seçenekleri:
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              style={{ width: '100%', justifyContent: 'space-between', padding: '8px 12px', fontSize: '12px' }}
-              onClick={() => {
-                setEmail('admin@kocaeli-org.local');
-                setPassword('admin123');
-              }}
-            >
-              <span>👑 <strong>Genel Yönetici</strong> (Tüm Gölcük)</span>
-              <span style={{ color: 'var(--primary)' }}>Seç &rarr;</span>
-            </button>
-
-            <button
-              type="button"
-              className="btn btn-secondary"
-              style={{ width: '100%', justifyContent: 'space-between', padding: '8px 12px', fontSize: '12px' }}
-              onClick={() => {
-                setEmail('sorumlu@kocaeli-org.local');
-                setPassword('sorumlu123');
-              }}
-            >
-              <span>📍 <strong>Mahalle Sorumlusu</strong> (Değirmendere M.)</span>
-              <span style={{ color: 'var(--primary)' }}>Seç &rarr;</span>
-            </button>
-          </div>
-        </div>
       </div>
     </div>
   );
