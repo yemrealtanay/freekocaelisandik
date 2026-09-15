@@ -3,8 +3,8 @@ import { api } from '../utils/api';
 import { Plus, ToggleLeft, ToggleRight, Trash2, X, Shield, MapPin, Check, AlertCircle } from 'lucide-react';
 
 const DISTRICTS = [
-  'Başiskele', 'Çayırova', 'Darıca', 'Derince', 'Dilovası', 
-  'Gebze', 'Gölcük', 'İzmit', 'Kandıra', 'Karamürsel', 'Kartepe', 'Körfez'
+  'Gölcük', 'Başiskele', 'Çayırova', 'Darıca', 'Derince', 'Dilovası', 
+  'Gebze', 'İzmit', 'Kandıra', 'Karamürsel', 'Kartepe', 'Körfez'
 ];
 
 export default function UsersList({ currentUser }) {
@@ -24,7 +24,9 @@ export default function UsersList({ currentUser }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState('USER');
-  const [district, setDistrict] = useState(DISTRICTS[0]);
+  const [district, setDistrict] = useState('Gölcük');
+  const [neighborhood, setNeighborhood] = useState('');
+  const [neighborhoodOptions, setNeighborhoodOptions] = useState([]);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -34,6 +36,21 @@ export default function UsersList({ currentUser }) {
       fetchLogs();
     }
   }, [activeSubTab]);
+
+  useEffect(() => {
+    if (modalOpen && district) {
+      fetchDistrictNeighborhoods(district);
+    }
+  }, [modalOpen, district]);
+
+  const fetchDistrictNeighborhoods = async (dist) => {
+    try {
+      const data = await api.members.getNeighborhoods(dist);
+      setNeighborhoodOptions(data);
+    } catch (e) {
+      console.error('Mahalleler yüklenemedi:', e);
+    }
+  };
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -122,7 +139,7 @@ export default function UsersList({ currentUser }) {
   const handleCreateUser = async (e) => {
     e.preventDefault();
     if (!name || !email || !password) {
-      setErrorMsg('Tüm alanları doldurmanız gerekmektedir.');
+      setErrorMsg('Lütfen ad soyad, e-posta ve şifre alanlarını doldurun.');
       return;
     }
 
@@ -135,9 +152,10 @@ export default function UsersList({ currentUser }) {
         email,
         password,
         role,
-        district: role === 'ADMIN' ? null : district
+        district: role === 'ADMIN' ? null : district,
+        neighborhood: role === 'ADMIN' ? null : (neighborhood || null)
       });
-      setSuccessMsg('Kullanıcı başarıyla oluşturuldu.');
+      setSuccessMsg('Mahalle sorumlusu / kullanıcı başarıyla oluşturuldu.');
       setModalOpen(false);
       
       // Reset form
@@ -145,7 +163,8 @@ export default function UsersList({ currentUser }) {
       setEmail('');
       setPassword('');
       setRole('USER');
-      setDistrict(DISTRICTS[0]);
+      setDistrict('Gölcük');
+      setNeighborhood('');
       
       fetchUsers();
     } catch (err) {
@@ -159,17 +178,17 @@ export default function UsersList({ currentUser }) {
     <div className="page-container">
       <div className="page-header">
         <div className="page-title-area">
-          <h2 className="page-title">{activeSubTab === 'users' ? 'Kullanıcılar' : 'İşlem Günlükleri'}</h2>
+          <h2 className="page-title">{activeSubTab === 'users' ? 'Kullanıcı & Mahalle Sorumluları' : 'İşlem Günlükleri'}</h2>
           <span className="page-subtitle">
             {activeSubTab === 'users' 
-              ? 'İlçe sorumluları ve yöneticiler' 
-              : 'Sistem genelinde yapılan tüm kritik işlemlerin güvenlik kayıtları'}
+              ? 'Saha sorumluları, mahalle temsilcileri ve sistem yöneticileri' 
+              : 'Sistem genelinde yapılan tüm saha ve üye güncellemelerinin denetim kayıtları'}
           </span>
         </div>
         {activeSubTab === 'users' && (
           <button className="btn btn-primary" onClick={() => setModalOpen(true)}>
             <Plus size={16} />
-            <span>Yeni Kullanıcı Ekle</span>
+            <span>Yeni Sorumlu Ekle</span>
           </button>
         )}
       </div>
@@ -180,7 +199,7 @@ export default function UsersList({ currentUser }) {
           className={`view-btn ${activeSubTab === 'users' ? 'active' : ''}`}
           onClick={() => setActiveSubTab('users')}
         >
-          Kullanıcı Yönetimi
+          Sorumlu ve Kullanıcılar
         </button>
         <button 
           className={`view-btn ${activeSubTab === 'logs' ? 'active' : ''}`}
@@ -195,15 +214,15 @@ export default function UsersList({ currentUser }) {
 
       {activeSubTab === 'users' ? (
         loading ? (
-          <div style={{ color: 'var(--text-muted)' }}>Yükleniyor...</div>
+          <div style={{ color: 'var(--text-muted)', padding: '24px' }}>Yükleniyor...</div>
         ) : (
           <div className="table-container">
             <table className="custom-table">
               <thead>
                 <tr>
                   <th>Ad Soyad</th>
-                  <th>Email</th>
-                  <th>İlçe</th>
+                  <th>E-posta</th>
+                  <th>Sorumluluk Alanı</th>
                   <th>Rol</th>
                   <th>Durum</th>
                   <th style={{ textAlign: 'right' }}>İşlemler</th>
@@ -212,27 +231,36 @@ export default function UsersList({ currentUser }) {
               <tbody>
                 {users.map((u) => (
                   <tr key={u.id}>
-                    <td style={{ fontWeight: 600 }}>{u.name} {u.id === currentUser.id && <span style={{ color: 'var(--text-dim)', fontSize: '11px', fontWeight: 'normal' }}>(Siz)</span>}</td>
+                    <td style={{ fontWeight: 600 }}>
+                      {u.name} {u.id === currentUser.id && <span style={{ color: 'var(--text-dim)', fontSize: '11px', fontWeight: 'normal' }}>(Siz)</span>}
+                    </td>
                     <td>{u.email}</td>
                     <td>
                       {u.role === 'ADMIN' ? (
-                        <span style={{ color: 'var(--text-dim)' }}>&mdash; (tüm ilçeler)</span>
+                        <span style={{ color: 'var(--text-dim)', fontSize: '13px' }}>&mdash; (Tüm İl ve İlçeler)</span>
                       ) : (
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                          <MapPin size={12} style={{ color: 'var(--text-muted)' }} />
-                          {u.district}
-                        </span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
+                            <MapPin size={12} style={{ color: 'var(--primary)' }} />
+                            {u.district || 'Gölcük'}
+                          </span>
+                          {u.neighborhood && (
+                            <span className="neighborhood-badge" style={{ width: 'fit-content', marginTop: '2px' }}>
+                              {u.neighborhood}
+                            </span>
+                          )}
+                        </div>
                       )}
                     </td>
                     <td>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '13px' }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}>
                         {u.role === 'ADMIN' ? (
                           <>
-                            <Shield size={12} style={{ color: 'var(--primary)' }} />
-                            Yönetici
+                            <Shield size={13} style={{ color: 'var(--primary)' }} />
+                            <strong>Genel Yönetici</strong>
                           </>
                         ) : (
-                          'Kullanıcı'
+                          <span>Mahalle Sorumlusu</span>
                         )}
                       </span>
                     </td>
@@ -243,11 +271,11 @@ export default function UsersList({ currentUser }) {
                         fontSize: '13px',
                         display: 'inline-flex',
                         alignItems: 'center',
-                        gap: '4px'
+                        gap: '6px'
                       }}>
                         <span style={{ 
-                          width: '6px', 
-                          height: '6px', 
+                          width: '7px', 
+                          height: '7px', 
                           borderRadius: '50%', 
                           backgroundColor: u.status === 'ACTIVE' ? 'var(--success)' : 'var(--text-dim)' 
                         }} />
@@ -266,9 +294,10 @@ export default function UsersList({ currentUser }) {
                         </button>
                         <button 
                           className="btn btn-danger"
-                          style={{ padding: '6px', borderRadius: 'var(--radius-sm)' }}
+                          style={{ padding: '6px 10px', borderRadius: 'var(--radius-sm)' }}
                           onClick={() => handleDeleteUser(u)}
                           disabled={u.id === currentUser.id}
+                          title="Kullanıcıyı Sil"
                         >
                           <Trash2 size={14} />
                         </button>
@@ -282,7 +311,7 @@ export default function UsersList({ currentUser }) {
         )
       ) : (
         loadingLogs ? (
-          <div style={{ color: 'var(--text-muted)' }}>Yükleniyor...</div>
+          <div style={{ color: 'var(--text-muted)', padding: '24px' }}>Yükleniyor...</div>
         ) : (
           <div className="table-container">
             <table className="custom-table">
@@ -328,9 +357,9 @@ export default function UsersList({ currentUser }) {
       {/* User Creation Modal */}
       {modalOpen && (
         <div className="modal-backdrop" onClick={() => setModalOpen(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
             <div className="modal-header">
-              <h3 style={{ fontSize: '18px', fontWeight: 700 }}>Yeni Kullanıcı Ekle</h3>
+              <h3 style={{ fontSize: '18px', fontWeight: 700 }}>Yeni Sorumlu Ekle</h3>
               <button className="drawer-close" onClick={() => setModalOpen(false)}>
                 <X size={18} />
               </button>
@@ -338,7 +367,7 @@ export default function UsersList({ currentUser }) {
             <form onSubmit={handleCreateUser}>
               <div className="modal-body">
                 <div className="form-group">
-                  <label>Ad Soyad</label>
+                  <label>Ad Soyad <span style={{ color: 'var(--danger)' }}>*</span></label>
                   <input
                     type="text"
                     className="form-control"
@@ -350,11 +379,11 @@ export default function UsersList({ currentUser }) {
                 </div>
 
                 <div className="form-group">
-                  <label>E-posta</label>
+                  <label>E-posta (Giriş için) <span style={{ color: 'var(--danger)' }}>*</span></label>
                   <input
                     type="email"
                     className="form-control"
-                    placeholder="ahmet@kocaeli-org.local"
+                    placeholder="ahmet@kocaeli-saha.local"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
@@ -362,7 +391,7 @@ export default function UsersList({ currentUser }) {
                 </div>
 
                 <div className="form-group">
-                  <label>Şifre</label>
+                  <label>Şifre <span style={{ color: 'var(--danger)' }}>*</span></label>
                   <input
                     type="password"
                     className="form-control"
@@ -380,24 +409,48 @@ export default function UsersList({ currentUser }) {
                     value={role}
                     onChange={(e) => setRole(e.target.value)}
                   >
-                    <option value="USER">İlçe Sorumlusu (Kullanıcı)</option>
+                    <option value="USER">Mahalle Sorumlusu (Saha Kullanıcısı)</option>
                     <option value="ADMIN">Genel Yönetici (Admin)</option>
                   </select>
                 </div>
 
                 {role === 'USER' && (
-                  <div className="form-group">
-                    <label>Görevli Olduğu İlçe</label>
-                    <select
-                      className="form-control"
-                      value={district}
-                      onChange={(e) => setDistrict(e.target.value)}
-                    >
-                      {DISTRICTS.map(d => (
-                        <option key={d} value={d}>{d}</option>
-                      ))}
-                    </select>
-                  </div>
+                  <>
+                    <div className="form-group">
+                      <label>Görevli Olduğu İlçe</label>
+                      <select
+                        className="form-control"
+                        value={district}
+                        onChange={(e) => {
+                          setDistrict(e.target.value);
+                          setNeighborhood('');
+                        }}
+                      >
+                        {DISTRICTS.map(d => (
+                          <option key={d} value={d}>{d}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="form-group">
+                      <label>Sorumlu Olduğu Mahalle</label>
+                      <select
+                        className="form-control"
+                        value={neighborhood}
+                        onChange={(e) => setNeighborhood(e.target.value)}
+                      >
+                        <option value="">-- Tüm Mahalleler (Genel Saha) --</option>
+                        {neighborhoodOptions.map(n => (
+                          <option key={n.neighborhood} value={n.neighborhood}>
+                            {n.neighborhood} ({n.count} üye)
+                          </option>
+                        ))}
+                      </select>
+                      <span style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '4px', display: 'block' }}>
+                        Mahalle seçildiğinde bu sorumlu doğrudan kendi mahallesine ait üyeleri görecektir.
+                      </span>
+                    </div>
+                  </>
                 )}
               </div>
               <div className="modal-footer">
@@ -405,7 +458,7 @@ export default function UsersList({ currentUser }) {
                   Vazgeç
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={submitting}>
-                  {submitting ? 'Oluşturuluyor...' : 'Kullanıcı Oluştur'}
+                  {submitting ? 'Oluşturuluyor...' : 'Sorumlu Hesabı Oluştur'}
                 </button>
               </div>
             </form>

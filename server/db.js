@@ -4,17 +4,17 @@ const path = require('path');
 const fs = require('fs');
 const bcrypt = require('bcryptjs');
 
-const dbDir = path.join(__dirname, 'data');
+const dbDir = process.env.DATA_DIR || path.join(__dirname, 'data');
 if (!fs.existsSync(dbDir)) {
   fs.mkdirSync(dbDir, { recursive: true });
 }
 
-const uploadsDir = path.join(__dirname, 'uploads');
+const uploadsDir = process.env.UPLOADS_DIR || path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-const dbPath = path.join(dbDir, 'db.sqlite');
+const dbPath = process.env.DB_PATH || path.join(dbDir, 'db.sqlite');
 
 let db = null;
 
@@ -37,6 +37,7 @@ async function getDb() {
       email TEXT UNIQUE NOT NULL,
       password_hash TEXT NOT NULL,
       district TEXT, -- NULL for admin who has access to all
+      neighborhood TEXT, -- NULL or specific neighborhood for neighborhood representatives
       role TEXT NOT NULL CHECK(role IN ('ADMIN', 'USER')),
       status TEXT NOT NULL CHECK(status IN ('ACTIVE', 'PASSIVE')) DEFAULT 'ACTIVE',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -51,9 +52,13 @@ async function getDb() {
       phone TEXT,
       province TEXT DEFAULT 'KOCAELİ',
       district TEXT NOT NULL,
+      neighborhood TEXT,
       school TEXT,
       ballot_no TEXT,
       role TEXT NOT NULL DEFAULT 'GOREVSIZ',
+      vote_stance TEXT NOT NULL DEFAULT 'BELIRTILMEDI', -- DESTEKLIYOR, KARARSIZ, MESAFELI, BELIRTILMEDI
+      contact_status TEXT NOT NULL DEFAULT 'GORUSULMEDI', -- GORUSULDU, GORUSULMEDI, ULASILAMADI
+      last_contact_date TEXT,
       search_index TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -260,11 +265,47 @@ async function getDb() {
     try { await db.run('ROLLBACK'); } catch(_) {}
   }
 
+  // Migration v4: Add neighborhood, vote_stance, contact_status, last_contact_date
+  try {
+    const memberCols = await db.all('PRAGMA table_info(members)');
+    const colNames = memberCols.map(c => c.name);
+
+    if (!colNames.includes('neighborhood')) {
+      console.log('Migrating: Adding neighborhood column to members table...');
+      await db.run('ALTER TABLE members ADD COLUMN neighborhood TEXT');
+    }
+    if (!colNames.includes('vote_stance')) {
+      console.log('Migrating: Adding vote_stance column to members table...');
+      await db.run("ALTER TABLE members ADD COLUMN vote_stance TEXT DEFAULT 'BELIRTILMEDI'");
+    }
+    if (!colNames.includes('contact_status')) {
+      console.log('Migrating: Adding contact_status column to members table...');
+      await db.run("ALTER TABLE members ADD COLUMN contact_status TEXT DEFAULT 'GORUSULMEDI'");
+    }
+    if (!colNames.includes('last_contact_date')) {
+      console.log('Migrating: Adding last_contact_date column to members table...');
+      await db.run('ALTER TABLE members ADD COLUMN last_contact_date TEXT');
+    }
+
+    const userCols = await db.all('PRAGMA table_info(users)');
+    const userColNames = userCols.map(c => c.name);
+    if (!userColNames.includes('neighborhood')) {
+      console.log('Migrating: Adding neighborhood column to users table...');
+      await db.run('ALTER TABLE users ADD COLUMN neighborhood TEXT');
+    }
+
+    await db.run('CREATE INDEX IF NOT EXISTS idx_members_neighborhood ON members(neighborhood)');
+    await db.run('CREATE INDEX IF NOT EXISTS idx_members_vote_stance ON members(vote_stance)');
+    await db.run('CREATE INDEX IF NOT EXISTS idx_members_contact_status ON members(contact_status)');
+  } catch (err) {
+    console.error('Failed to run migration v4:', err);
+  }
+
   // Seed default admin user if not exists
   const adminExists = await db.get('SELECT * FROM users WHERE email = ?', ['admin@kocaeli-org.local']);
   if (!adminExists) {
     const adminId = 'admin-' + Math.random().toString(36).substr(2, 9);
-    const passwordHash = await bcrypt.hash('admin123456', 10);
+    const passwordHash = await bcrypt.hash('admin123', 10);
     await db.run(
       'INSERT INTO users (id, name, email, password_hash, district, role, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
       [adminId, 'Admin Kullanıcı', 'admin@kocaeli-org.local', passwordHash, null, 'ADMIN', 'ACTIVE']
@@ -272,9 +313,22 @@ async function getDb() {
     console.log('Seeded default admin user successfully.');
   }
 
+  // Seed default mahalle sorumlusu user if not exists
+  const repExists = await db.get('SELECT * FROM users WHERE email = ?', ['sorumlu@kocaeli-org.local']);
+  if (!repExists) {
+    const repId = 'user-' + Math.random().toString(36).substr(2, 9);
+    const passwordHash = await bcrypt.hash('sorumlu123', 10);
+    await db.run(
+      'INSERT INTO users (id, name, email, password_hash, district, neighborhood, role, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [repId, 'Ahmet Yılmaz (Mahalle Sorumlusu)', 'sorumlu@kocaeli-org.local', passwordHash, 'Gölcük', 'DEĞİRMENDERE MERKEZ MAH.', 'USER', 'ACTIVE']
+    );
+    console.log('Seeded default mahalle sorumlusu successfully.');
+  }
+
   return db;
 }
 
 module.exports = {
-  getDb
+  getDb,
+  dbPath
 };

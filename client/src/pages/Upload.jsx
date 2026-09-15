@@ -3,8 +3,8 @@ import { api } from '../utils/api';
 import { Upload, FileSpreadsheet, CheckCircle2, AlertCircle, RefreshCw, ArrowLeft, Play } from 'lucide-react';
 
 const DISTRICTS = [
-  'Başiskele', 'Çayırova', 'Darıca', 'Derince', 'Dilovası', 
-  'Gebze', 'Gölcük', 'İzmit', 'Kandıra', 'Karamürsel', 'Kartepe', 'Körfez'
+  'Gölcük', 'Başiskele', 'Çayırova', 'Darıca', 'Derince', 'Dilovası', 
+  'Gebze', 'İzmit', 'Kandıra', 'Karamürsel', 'Kartepe', 'Körfez'
 ];
 
 export default function UploadPage({ onUploadStart }) {
@@ -26,6 +26,7 @@ export default function UploadPage({ onUploadStart }) {
     first_name: '',
     last_name: '',
     phone: '',
+    neighborhood: '',
     ballot_area: '',
     ballot_no: '',
     role: '',
@@ -346,6 +347,17 @@ export default function UploadPage({ onUploadStart }) {
 
               <div className="form-group">
                 <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span>Mahalle</span>
+                  <span style={{ color: 'var(--primary)', fontSize: '11px', fontWeight: 600 }}>(Saha Takibi için Önemli)</span>
+                </label>
+                <select className="form-control" value={mapping.neighborhood} onChange={(e) => handleMappingChange('neighborhood', e.target.value)}>
+                  <option value="">-- Eşleştirme Yok --</option>
+                  {excelHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                   <span>Sandık Alanı / Okul</span>
                   <span style={{ color: 'var(--text-dim)', fontSize: '11px' }}>(Opsiyonel)</span>
                 </label>
@@ -416,6 +428,7 @@ export default function UploadPage({ onUploadStart }) {
                       <th>Adı</th>
                       <th>Soyadı</th>
                       <th>Cep Telefonu</th>
+                      <th>Mahalle</th>
                       <th>Sandık Alanı (Okul)</th>
                       <th>Sandık No</th>
                       <th>Görev / Rol</th>
@@ -437,6 +450,9 @@ export default function UploadPage({ onUploadStart }) {
                         </td>
                         <td style={{ color: mapping.phone ? 'var(--text-main)' : 'var(--text-dim)' }}>
                           {mapping.phone ? String(row[mapping.phone] || '') : '—'}
+                        </td>
+                        <td style={{ color: mapping.neighborhood ? 'var(--text-main)' : 'var(--text-dim)', fontWeight: 500 }}>
+                          {mapping.neighborhood ? String(row[mapping.neighborhood] || '') : '—'}
                         </td>
                         <td style={{ color: mapping.ballot_area ? 'var(--text-main)' : 'var(--text-dim)' }}>
                           {mapping.ballot_area ? String(row[mapping.ballot_area] || '') : '—'}

@@ -1,7 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, Plus, Phone, Calendar, User, Info, FileText, CheckCircle2, Trash2 } from 'lucide-react';
+import { X, Save, Plus, Phone, Calendar, User, Info, FileText, CheckCircle2, Trash2, PhoneCall, MapPin, MessageSquare } from 'lucide-react';
 import { api } from '../utils/api';
 import { formatPhone } from './MemberTable';
+
+export function getStanceLabel(stance) {
+  switch (stance) {
+    case 'DESTEKLIYOR': return 'Destekliyor';
+    case 'KARARSIZ': return 'Kararsız';
+    case 'MESAFELI': return 'Mesafeli';
+    default: return 'Henüz Görüşülmedi';
+  }
+}
 
 export default function MemberDetailDrawer({ member, onClose, onUpdateSuccess }) {
   const [activeSubTab, setActiveSubTab] = useState('timeline'); // 'timeline' or 'edit'
@@ -11,17 +20,20 @@ export default function MemberDetailDrawer({ member, onClose, onUpdateSuccess })
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [phone, setPhone] = useState('');
+  const [neighborhood, setNeighborhood] = useState('');
   const [school, setSchool] = useState('');
   const [ballotNo, setBallotNo] = useState('');
-  const [role, setRole] = useState('');
+  const [voteStance, setVoteStance] = useState('BELIRTILMEDI');
+  const [contactStatus, setContactStatus] = useState('GORUSULMEDI');
   
   // Timeline events state
   const [timelineEvents, setTimelineEvents] = useState([]);
   const [loadingTimeline, setLoadingTimeline] = useState(false);
   
-  // New event form state
+  // New interaction form state
   const [eventType, setEventType] = useState('ARAMA');
   const [eventDate, setEventDate] = useState(new Date().toISOString().split('T')[0]);
+  const [eventStance, setEventStance] = useState('BELIRTILMEDI');
   const [eventNote, setEventNote] = useState('');
   const [submittingEvent, setSubmittingEvent] = useState(false);
   const [submittingMember, setSubmittingMember] = useState(false);
@@ -36,9 +48,12 @@ export default function MemberDetailDrawer({ member, onClose, onUpdateSuccess })
       setFirstName(member.first_name || '');
       setLastName(member.last_name || '');
       setPhone(member.phone || '');
+      setNeighborhood(member.neighborhood || '');
       setSchool(member.school || '');
       setBallotNo(member.ballot_no || '');
-      setRole(member.role || 'GOREVSIZ');
+      setVoteStance(member.vote_stance || 'BELIRTILMEDI');
+      setContactStatus(member.contact_status || 'GORUSULMEDI');
+      setEventStance(member.vote_stance || 'BELIRTILMEDI');
       setErrorMsg('');
       setSuccessMsg('');
       setActiveSubTab('timeline');
@@ -54,7 +69,7 @@ export default function MemberDetailDrawer({ member, onClose, onUpdateSuccess })
       setTimelineEvents(data);
     } catch (err) {
       console.error(err);
-      setErrorMsg('Zaman akışı yüklenemedi.');
+      setErrorMsg('Görüşme geçmişi yüklenemedi.');
     } finally {
       setLoadingTimeline(false);
     }
@@ -75,16 +90,17 @@ export default function MemberDetailDrawer({ member, onClose, onUpdateSuccess })
         first_name: firstName,
         last_name: lastName,
         phone,
+        neighborhood,
         school,
         ballot_no: ballotNo,
-        role
+        vote_stance: voteStance,
+        contact_status: contactStatus
       });
       setSuccessMsg('Üye bilgileri başarıyla güncellendi.');
       onUpdateSuccess();
-      // Reload timeline as a role change log might have been created
       fetchTimeline();
     } catch (err) {
-      setErrorMsg(err.message || 'Güncelleme hatası.');
+      setErrorMsg(err.message || 'Güncelleme sırasında hata oluştu.');
     } finally {
       setSubmittingMember(false);
     }
@@ -111,24 +127,29 @@ export default function MemberDetailDrawer({ member, onClose, onUpdateSuccess })
   const handleAddTimelineEvent = async (e) => {
     e.preventDefault();
     if (!eventNote.trim()) {
-      setErrorMsg('Lütfen işlem notunu girin.');
+      setErrorMsg('Lütfen görüşme notunu girin.');
       return;
     }
     setSubmittingEvent(true);
     setErrorMsg('');
     setSuccessMsg('');
     try {
-      await api.members.addTimeline(member.id, {
-        type: eventType,
-        date: eventDate,
-        note: eventNote
+      // Update member stance and add timeline note
+      await api.members.update(member.id, {
+        vote_stance: eventStance,
+        contact_status: 'GORUSULDU',
+        note: eventNote,
+        interaction_type: eventType
       });
+
       setEventNote('');
-      setSuccessMsg('İşlem zaman akışına eklendi.');
+      setVoteStance(eventStance);
+      setContactStatus('GORUSULDU');
+      setSuccessMsg('Görüşme başarıyla kaydedildi.');
       fetchTimeline();
-      onUpdateSuccess(); // Trigger list refresh to show latest note in list
+      onUpdateSuccess();
     } catch (err) {
-      setErrorMsg(err.message || 'Aktivite eklenemedi.');
+      setErrorMsg(err.message || 'Görüşme kaydedilemedi.');
     } finally {
       setSubmittingEvent(false);
     }
@@ -136,10 +157,11 @@ export default function MemberDetailDrawer({ member, onClose, onUpdateSuccess })
 
   const getEventIcon = (type) => {
     switch (type) {
-      case 'ARAMA': return <Phone size={14} />;
-      case 'SMS': return <FileText size={14} />;
-      case 'ROLE_CHANGE': return <CheckCircle2 size={14} />;
-      default: return <Info size={14} />;
+      case 'ARAMA': return <Phone size={13} />;
+      case 'SMS': return <FileText size={13} />;
+      case 'YUZ_YUZE': case 'ZIYARET': return <User size={13} />;
+      case 'DURUM_DEGISIKLIGI': return <CheckCircle2 size={13} />;
+      default: return <MessageSquare size={13} />;
     }
   };
 
@@ -147,56 +169,85 @@ export default function MemberDetailDrawer({ member, onClose, onUpdateSuccess })
     switch (type) {
       case 'ARAMA': return 'Telefon Araması';
       case 'SMS': return 'SMS Gönderimi';
-      case 'EPOSTA': return 'E-posta';
-      case 'YUZ_YUZE': return 'Yüz Yüze';
-      case 'ROLE_CHANGE': return 'Görev Değişimi';
-      case 'SYSTEM': return 'Sistem Notu';
-      default: return 'Not';
+      case 'YUZ_YUZE': return 'Yüz Yüze Görüşme';
+      case 'ZIYARET': return 'Ev / İşyeri Ziyareti';
+      case 'DURUM_DEGISIKLIGI': return 'İntiba Değişimi';
+      case 'GOREV_DEGISIKLIGI': return 'Görev Değişimi';
+      case 'SISTEM': case 'SYSTEM': return 'Sistem Kaydı';
+      default: return 'Görüşme Notu';
     }
   };
 
   if (!member) return null;
 
+  const cleanPhone = phone ? phone.replace(/\D/g, '') : '';
+
   return (
     <div className="drawer-backdrop" onClick={onClose}>
       <div className="drawer-content" onClick={(e) => e.stopPropagation()}>
+        
+        {/* Drawer Top Header */}
         <div className="drawer-header">
           <div className="drawer-title-area">
             <div className="drawer-title">{firstName} {lastName}</div>
-            <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-              {member.district} İlçesi &bull; {formatPhone(phone)}
+            <div style={{ fontSize: '13px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginTop: '4px' }}>
+              {neighborhood && (
+                <span className="neighborhood-badge">
+                  <MapPin size={10} />
+                  {neighborhood}
+                </span>
+              )}
+              <span className={`stance-badge ${voteStance}`}>
+                {getStanceLabel(voteStance)}
+              </span>
             </div>
           </div>
-          <button className="drawer-close" onClick={onClose}>
+          <button className="drawer-close" onClick={onClose} title="Kapat">
             <X size={20} />
           </button>
         </div>
 
+        {/* Quick Call Bar on Mobile */}
+        {cleanPhone && (
+          <div style={{ padding: '0 24px 16px' }}>
+            <a 
+              href={`tel:${cleanPhone}`} 
+              className="btn-call-direct"
+              style={{ padding: '10px 16px' }}
+            >
+              <PhoneCall size={18} />
+              <span>{formatPhone(phone)} &mdash; Hemen Ara</span>
+            </a>
+          </div>
+        )}
+
         {/* Tab Swapping inside Drawer */}
-        <div style={{ display: 'flex', borderBottom: '1px solid var(--border-color)', marginBottom: '24px' }}>
+        <div style={{ display: 'flex', borderBottom: '1px solid var(--border-color)', margin: '0 24px 20px' }}>
           <button
             onClick={() => setActiveSubTab('timeline')}
             style={{
-              padding: '12px 20px',
+              padding: '12px 18px',
               background: 'none',
               border: 'none',
               color: activeSubTab === 'timeline' ? 'var(--primary)' : 'var(--text-muted)',
               borderBottom: activeSubTab === 'timeline' ? '2px solid var(--primary)' : 'none',
               fontWeight: 600,
+              fontSize: '14px',
               cursor: 'pointer'
             }}
           >
-            Zaman Akışı (Timeline)
+            Görüşmeler & Notlar
           </button>
           <button
             onClick={() => setActiveSubTab('edit')}
             style={{
-              padding: '12px 20px',
+              padding: '12px 18px',
               background: 'none',
               border: 'none',
               color: activeSubTab === 'edit' ? 'var(--primary)' : 'var(--text-muted)',
               borderBottom: activeSubTab === 'edit' ? '2px solid var(--primary)' : 'none',
               fontWeight: 600,
+              fontSize: '14px',
               cursor: 'pointer'
             }}
           >
@@ -204,10 +255,10 @@ export default function MemberDetailDrawer({ member, onClose, onUpdateSuccess })
           </button>
         </div>
 
-        {errorMsg && <div className="toast-msg error">{errorMsg}</div>}
-        {successMsg && <div className="toast-msg success">{successMsg}</div>}
+        {errorMsg && <div className="toast-msg error" style={{ margin: '0 24px 16px' }}>{errorMsg}</div>}
+        {successMsg && <div className="toast-msg success" style={{ margin: '0 24px 16px' }}>{successMsg}</div>}
 
-        <div className="drawer-body">
+        <div className="drawer-body" style={{ padding: '0 24px 24px', overflowY: 'auto' }}>
           {activeSubTab === 'edit' ? (
             /* Member Edit Form */
             <form onSubmit={handleUpdateMember}>
@@ -244,31 +295,58 @@ export default function MemberDetailDrawer({ member, onClose, onUpdateSuccess })
                     className="form-control"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
+                    placeholder="05XX XXX XX XX"
                   />
                 </div>
                 <div className="form-group">
-                  <label>TCKN</label>
+                  <label>Mahalle</label>
                   <input
                     type="text"
                     className="form-control"
-                    value={tckn}
-                    onChange={(e) => setTkn(e.target.value)}
-                    maxLength={11}
+                    value={neighborhood}
+                    onChange={(e) => setNeighborhood(e.target.value)}
+                    placeholder="Örn: ATATÜRK MAH."
                   />
                 </div>
               </div>
 
-              <h4 className="drawer-section-title" style={{ marginTop: '16px' }}>Sandık & Görev Detayları</h4>
+              <div className="grid-2-col">
+                <div className="form-group">
+                  <label>Seçmen İntibası</label>
+                  <select
+                    className="form-control"
+                    value={voteStance}
+                    onChange={(e) => setVoteStance(e.target.value)}
+                  >
+                    <option value="DESTEKLIYOR">🟢 Destekliyor</option>
+                    <option value="KARARSIZ">🟡 Kararsız</option>
+                    <option value="MESAFELI">🔴 Mesafeli</option>
+                    <option value="BELIRTILMEDI">⚪ Henüz Görüşülmedi</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>Görüşme Durumu</label>
+                  <select
+                    className="form-control"
+                    value={contactStatus}
+                    onChange={(e) => setContactStatus(e.target.value)}
+                  >
+                    <option value="GORUSULDU">Görüşüldü</option>
+                    <option value="GORUSULMEDI">Görüşülmedi</option>
+                    <option value="ULASILAMADI">Ulaşılamadı</option>
+                  </select>
+                </div>
+              </div>
 
               <div className="grid-2-col">
                 <div className="form-group">
-                  <label>Sandık Alanı (Okul)</label>
+                  <label>Sandık Alanı / Okul</label>
                   <input
                     type="text"
                     className="form-control"
                     value={school}
                     onChange={(e) => setSchool(e.target.value)}
-                    placeholder="Örn: Yunus Emre İlkokulu"
+                    placeholder="Örn: Barbaros Hayrettin Lisesi"
                   />
                 </div>
                 <div className="form-group">
@@ -284,78 +362,57 @@ export default function MemberDetailDrawer({ member, onClose, onUpdateSuccess })
               </div>
 
               <div className="form-group">
-                <label>Görev Rolü</label>
-                <select
+                <label>TC Kimlik Numarası (TCKN)</label>
+                <input
+                  type="text"
                   className="form-control"
-                  value={role}
-                  onChange={(e) => setRole(e.target.value)}
-                >
-                  <option value="GOREVSIZ">Görevsiz</option>
-                  <option value="ASIL_UYE">Asil Üye</option>
-                  <option value="YEDEK_UYE">Yedek Üye</option>
-                  <option value="MUSAHIT">Müşahit</option>
-                  <option value="YEDEK_MUSAHIT">Yedek Müşahit</option>
-                  <option value="OKUL_SORUMLUSU">Okul Sorumlusu</option>
-                  <option value="OKUL_YARDIMCISI">Okul Sorumlu Yardımcısı</option>
-                  <option value="AVUKAT">Avukat</option>
-                  <option value="KURYE">Kurye</option>
-                  <option value="BILISIM">Bilişim Sorumlusu</option>
-                  <option value="BOLGE_MAHALLE">Bölge/Mahalle Sorumlusu</option>
-                </select>
+                  value={tckn}
+                  onChange={(e) => setTckn(e.target.value)}
+                  maxLength={11}
+                  placeholder="11 haneli TCKN"
+                />
               </div>
 
-              <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
+              <div style={{ display: 'flex', gap: '12px', marginTop: '20px' }}>
                 <button
                   type="submit"
                   className="btn btn-primary"
                   disabled={submittingMember}
-                  style={{ flex: 1 }}
+                  style={{ flex: 1, minHeight: '44px' }}
                 >
                   <Save size={16} />
-                  <span>Kaydet</span>
+                  <span>Değişiklikleri Kaydet</span>
                 </button>
                 <button
                   type="button"
                   className="btn btn-danger"
                   onClick={handleDeleteMember}
                   disabled={submittingMember}
-                  style={{
-                    backgroundColor: 'var(--danger)',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: 'var(--radius-md)',
-                    padding: '10px 16px',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '6px',
-                    cursor: 'pointer',
-                    fontSize: '14px',
-                    fontWeight: 500
-                  }}
+                  style={{ minHeight: '44px', padding: '0 16px' }}
                 >
                   <Trash2 size={16} />
-                  <span>Üyeyi Sil</span>
+                  <span>Sil</span>
                 </button>
               </div>
             </form>
           ) : (
-            /* Timeline View & Log Add Form */
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', height: '100%' }}>
+            /* Timeline & Interaction Form */
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
               
               {/* Add Interaction Log Form */}
               <form onSubmit={handleAddTimelineEvent} style={{ 
                 backgroundColor: 'var(--bg-card)', 
                 border: '1px solid var(--border-color)', 
                 borderRadius: 'var(--radius-lg)', 
-                padding: '20px' 
+                padding: '18px' 
               }}>
-                <h4 style={{ fontSize: '13px', fontWeight: 600, textTransform: 'uppercase', marginBottom: '16px', color: 'var(--text-main)' }}>
-                  Yeni İşlem Ekle
+                <h4 style={{ fontSize: '13px', fontWeight: 700, textTransform: 'uppercase', marginBottom: '14px', color: 'var(--text-main)', letterSpacing: '0.5px' }}>
+                  Yeni Görüşme Kaydet
                 </h4>
+
                 <div className="grid-2-col" style={{ marginBottom: '12px' }}>
                   <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label>İşlem Türü</label>
+                    <label>İşlem / Görüşme Türü</label>
                     <select
                       className="form-control"
                       value={eventType}
@@ -363,14 +420,15 @@ export default function MemberDetailDrawer({ member, onClose, onUpdateSuccess })
                       style={{ padding: '8px 12px' }}
                     >
                       <option value="ARAMA">Telefon Araması</option>
-                      <option value="SMS">SMS Gönderimi</option>
-                      <option value="EPOSTA">E-posta</option>
                       <option value="YUZ_YUZE">Yüz Yüze Görüşme</option>
-                      <option value="NOTE">Sistem/Durum Notu</option>
+                      <option value="ZIYARET">Ev / İşyeri Ziyareti</option>
+                      <option value="SMS">SMS Gönderimi</option>
+                      <option value="NOT">Genel Not</option>
                     </select>
                   </div>
+
                   <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label>İşlem Tarihi</label>
+                    <label>Görüşme Tarihi</label>
                     <input
                       type="date"
                       className="form-control"
@@ -380,16 +438,32 @@ export default function MemberDetailDrawer({ member, onClose, onUpdateSuccess })
                     />
                   </div>
                 </div>
+
+                <div className="form-group" style={{ marginBottom: '12px' }}>
+                  <label>Bu Görüşme Sonucu Seçmen İntibası</label>
+                  <select
+                    className="form-control"
+                    value={eventStance}
+                    onChange={(e) => setEventStance(e.target.value)}
+                    style={{ padding: '8px 12px', fontWeight: 600 }}
+                  >
+                    <option value="DESTEKLIYOR">🟢 Destekliyor</option>
+                    <option value="KARARSIZ">🟡 Kararsız</option>
+                    <option value="MESAFELI">🔴 Mesafeli</option>
+                    <option value="BELIRTILMEDI">⚪ Henüz Görüşülmedi / Bilinmiyor</option>
+                  </select>
+                </div>
                 
                 <div className="form-group" style={{ marginBottom: '16px' }}>
-                  <label>Açıklama / Cevap</label>
+                  <label>Görüşme Notu / Detay</label>
                   <textarea
                     className="form-control"
-                    rows={2}
+                    rows={3}
                     value={eventNote}
                     onChange={(e) => setEventNote(e.target.value)}
-                    placeholder="Görüşme sonucu ne oldu? (Örn: Görevi kabul etti, SMS gönderildi vb.)"
-                    style={{ resize: 'none' }}
+                    placeholder="Görüşmede neler konuşuldu? Üyenin beklentisi veya yaklaşımı nedir?"
+                    style={{ resize: 'vertical' }}
+                    required
                   />
                 </div>
 
@@ -397,41 +471,51 @@ export default function MemberDetailDrawer({ member, onClose, onUpdateSuccess })
                   type="submit"
                   className="btn btn-primary"
                   disabled={submittingEvent}
-                  style={{ width: '100%', padding: '8px 16px' }}
+                  style={{ width: '100%', padding: '12px', justifyContent: 'center', minHeight: '44px', fontWeight: 600 }}
                 >
                   <Plus size={16} />
-                  <span>Zaman Akışına Ekle</span>
+                  <span>{submittingEvent ? 'Kaydediliyor...' : 'Görüşmeyi Kaydet'}</span>
                 </button>
               </form>
 
               {/* Timeline List */}
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-                <h4 className="drawer-section-title">Zaman Akışı</h4>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <h4 className="drawer-section-title">Görüşme Geçmişi ({timelineEvents.length})</h4>
                 
                 {loadingTimeline ? (
                   <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '24px' }}>
-                    Yükleniyor...
+                    Görüşme geçmişi yükleniyor...
                   </div>
                 ) : timelineEvents.length === 0 ? (
-                  <div style={{ textAlign: 'center', color: 'var(--text-dim)', padding: '24px', border: '1px dashed var(--border-color)', borderRadius: 'var(--radius-md)' }}>
-                    Bu üyeyle ilgili henüz bir işlem yapılmadı.
+                  <div style={{ 
+                    textAlign: 'center', 
+                    color: 'var(--text-dim)', 
+                    padding: '32px 16px', 
+                    border: '1px dashed var(--border-color)', 
+                    borderRadius: 'var(--radius-md)',
+                    fontSize: '13px'
+                  }}>
+                    Bu üyeyle ilgili henüz bir görüşme kaydı girilmemiş.
                   </div>
                 ) : (
-                  <div className="timeline" style={{ overflowY: 'auto', flex: 1, paddingRight: '8px' }}>
+                  <div className="timeline" style={{ paddingRight: '4px' }}>
                     {timelineEvents.map((event) => (
                       <div key={event.id} className={`timeline-item ${event.type}`}>
                         <div className="timeline-dot" />
                         <div className="timeline-content">
                           <div className="timeline-header">
-                            <span className="timeline-meta" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                              <span className="timeline-type-badge">{getEventLabel(event.type)}</span>
+                            <span className="timeline-meta" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                              <span className="timeline-type-badge" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                {getEventIcon(event.type)}
+                                {getEventLabel(event.type)}
+                              </span>
                               <span style={{ color: 'var(--text-dim)' }}>&middot;</span>
                               <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
                                 {event.user_name || 'Sistem'}
                               </span>
                             </span>
                             <span className="timeline-date" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                              <Calendar size={10} />
+                              <Calendar size={11} />
                               {event.date}
                             </span>
                           </div>

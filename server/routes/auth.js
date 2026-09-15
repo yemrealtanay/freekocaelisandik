@@ -37,7 +37,8 @@ router.post('/login', async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
-        district: user.district
+        district: user.district,
+        neighborhood: user.neighborhood || null
       }
     });
   } catch (error) {
@@ -50,7 +51,7 @@ router.post('/login', async (req, res) => {
 router.get('/me', requireAuth, async (req, res) => {
   try {
     const db = await getDb();
-    const user = await db.get('SELECT id, name, email, role, district, status FROM users WHERE id = ?', [req.user.id]);
+    const user = await db.get('SELECT id, name, email, role, district, neighborhood, status FROM users WHERE id = ?', [req.user.id]);
     
     if (!user) {
       return res.status(404).json({ message: 'Kullanıcı bulunamadı.' });

@@ -1,92 +1,180 @@
 import React from 'react';
-import { ArrowRight, Phone, MapPin, School, ClipboardList } from 'lucide-react';
-import { formatPhone, getRoleLabel } from './MemberTable';
+import { Phone, PhoneCall, MapPin, MessageSquarePlus, Clock, AlertCircle } from 'lucide-react';
+import { formatPhone } from './MemberTable';
 
-export default function MemberCardView({ members, onSelectMember, onRoleChange }) {
+export function getStanceLabel(stance) {
+  switch (stance) {
+    case 'DESTEKLIYOR': return 'Destekliyor';
+    case 'KARARSIZ': return 'Kararsız';
+    case 'MESAFELI': return 'Mesafeli';
+    default: return 'Henüz Görüşülmedi';
+  }
+}
+
+export default function MemberCardView({ members, onSelectMember, onStanceChange }) {
   if (!members || members.length === 0) {
     return (
-      <div style={{ textAlign: 'center', padding: '48px', color: 'var(--text-muted)' }}>
-        Eşleşen üye bulunamadı.
+      <div style={{ 
+        textAlign: 'center', 
+        padding: '60px 20px', 
+        color: 'var(--text-muted)',
+        backgroundColor: 'var(--bg-surface)',
+        borderRadius: 'var(--radius-lg)',
+        border: '1px dashed var(--border-color)',
+        margin: '20px 0'
+      }}>
+        <AlertCircle size={32} style={{ marginBottom: '12px', color: 'var(--text-dim)' }} />
+        <div style={{ fontSize: '15px', fontWeight: 600 }}>Eşleşen üye bulunamadı.</div>
+        <div style={{ fontSize: '13px', color: 'var(--text-dim)', marginTop: '4px' }}>
+          Lütfen mahalle seçimini veya arama kriterinizi kontrol edin.
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="card-grid">
-      {members.map((member) => (
-        <div key={member.id} className="member-card">
-          <div className="card-header">
-            <div className="card-title" onClick={() => onSelectMember(member)}>
-              <h3>{member.first_name} {member.last_name}</h3>
-              <span className="card-phone">{formatPhone(member.phone)}</span>
-            </div>
-            <select
-              className={`role-badge ${member.role}`}
-              value={member.role}
-              onChange={(e) => onRoleChange(member.id, e.target.value)}
-              style={{
-                cursor: 'pointer',
-                outline: 'none',
-                fontFamily: 'inherit',
-                paddingRight: '22px',
-                backgroundPosition: 'right 6px center',
-                backgroundRepeat: 'no-repeat',
-                backgroundImage: `url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b96a8' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E")`,
-                backgroundSize: '10px',
-                WebkitAppearance: 'none',
-                MozAppearance: 'none',
-                appearance: 'none'
-              }}
-            >
-              <option value="GOREVSIZ" style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-main)' }}>Görevsiz</option>
-              <option value="ASIL_UYE" style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-main)' }}>Asil Üye</option>
-              <option value="YEDEK_UYE" style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-main)' }}>Yedek Üye</option>
-              <option value="MUSAHIT" style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-main)' }}>Müşahit</option>
-              <option value="YEDEK_MUSAHIT" style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-main)' }}>Yedek Müşahit</option>
-              <option value="OKUL_SORUMLUSU" style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-main)' }}>Okul Sorumlusu</option>
-              <option value="OKUL_YARDIMCISI" style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-main)' }}>Okul Sorumlu Yardımcısı</option>
-              <option value="AVUKAT" style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-main)' }}>Avukat</option>
-              <option value="KURYE" style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-main)' }}>Kurye</option>
-              <option value="BILISIM" style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-main)' }}>Bilişim Sorumlusu</option>
-              <option value="BOLGE_MAHALLE" style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-main)' }}>Bölge/Mahalle Sorumlusu</option>
-            </select>
-          </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', margin: '16px 0' }}>
+      {members.map((member) => {
+        const cleanPhone = member.phone ? member.phone.replace(/\D/g, '') : '';
+        const rawStance = member.vote_stance || 'BELIRTILMEDI';
 
-          <div className="card-body">
-            <div className="card-info-item">
-              <span className="card-info-label">İlçe:</span>
-              <span className="card-info-value">{member.district}</span>
+        return (
+          <div key={member.id} className="mobile-card">
+            {/* Top Bar: Name & Mahalle */}
+            <div className="mobile-card-header">
+              <div style={{ flex: 1 }}>
+                <div className="mobile-card-title">
+                  {member.first_name} {member.last_name}
+                </div>
+                <div className="mobile-card-meta" style={{ marginTop: '4px' }}>
+                  {member.neighborhood ? (
+                    <span className="neighborhood-badge">
+                      <MapPin size={10} />
+                      {member.neighborhood}
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{member.district}</span>
+                  )}
+                  <span className={`stance-badge ${rawStance}`}>
+                    {getStanceLabel(rawStance)}
+                  </span>
+                </div>
+              </div>
             </div>
-            <div className="card-info-item">
-              <span className="card-info-label">Sandık Alanı:</span>
-              <span className="card-info-value" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                <School size={12} style={{ color: 'var(--text-dim)' }} />
-                {member.school || '—'}
-              </span>
-            </div>
-            <div className="card-info-item">
-              <span className="card-info-label">Sandık No:</span>
-              <span className="card-info-value">{member.ballot_no || '—'}</span>
-            </div>
-            <div className="card-info-item">
-              <span className="card-info-label">TCKN:</span>
-              <span className="card-info-value" style={{ fontFamily: 'monospace' }}>{member.tckn || '—'}</span>
-            </div>
-            {member.latest_note && (
-              <div className="card-note">
-                <strong>Son İşlem Notu:</strong> {member.latest_note}
+
+            {/* Quick Call Action (Rock solid on mobile) */}
+            {cleanPhone ? (
+              <a 
+                href={`tel:${cleanPhone}`} 
+                className="btn-call-direct"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <PhoneCall size={18} />
+                <span>{formatPhone(member.phone)} &mdash; Hemen Ara</span>
+              </a>
+            ) : (
+              <div style={{ 
+                padding: '10px', 
+                backgroundColor: 'rgba(255, 255, 255, 0.03)', 
+                borderRadius: 'var(--radius-md)', 
+                color: 'var(--text-dim)', 
+                fontSize: '13px',
+                textAlign: 'center' 
+              }}>
+                Telefon numarası kayıtlı değil
               </div>
             )}
-          </div>
 
-          <div className="card-actions">
-            <button className="btn btn-secondary" onClick={() => onSelectMember(member)} style={{ padding: '6px 12px', fontSize: '12px' }}>
-              <span>Profili İncele</span>
-              <ArrowRight size={12} />
-            </button>
+            {/* 4-Stance Quick Selection Buttons */}
+            <div>
+              <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '6px', textTransform: 'uppercase' }}>
+                Seçmen İntibası (Tek Tıkla Seç)
+              </div>
+              <div className="stance-button-group">
+                <button
+                  type="button"
+                  className={`stance-btn ${rawStance === 'DESTEKLIYOR' ? 'active DESTEKLIYOR' : ''}`}
+                  onClick={() => onStanceChange(member.id, 'DESTEKLIYOR')}
+                >
+                  <span style={{ fontSize: '14px' }}>🟢</span>
+                  <span>Destekliyor</span>
+                </button>
+
+                <button
+                  type="button"
+                  className={`stance-btn ${rawStance === 'KARARSIZ' ? 'active KARARSIZ' : ''}`}
+                  onClick={() => onStanceChange(member.id, 'KARARSIZ')}
+                >
+                  <span style={{ fontSize: '14px' }}>🟡</span>
+                  <span>Kararsız</span>
+                </button>
+
+                <button
+                  type="button"
+                  className={`stance-btn ${rawStance === 'MESAFELI' ? 'active MESAFELI' : ''}`}
+                  onClick={() => onStanceChange(member.id, 'MESAFELI')}
+                >
+                  <span style={{ fontSize: '14px' }}>🔴</span>
+                  <span>Mesafeli</span>
+                </button>
+
+                <button
+                  type="button"
+                  className={`stance-btn ${rawStance === 'BELIRTILMEDI' ? 'active BELIRTILMEDI' : ''}`}
+                  onClick={() => onStanceChange(member.id, 'BELIRTILMEDI')}
+                >
+                  <span style={{ fontSize: '14px' }}>⚪</span>
+                  <span>Görüşülmedi</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Note Preview & Last Action */}
+            <div style={{ 
+              backgroundColor: 'var(--bg-app)', 
+              borderRadius: 'var(--radius-md)', 
+              padding: '10px 12px',
+              fontSize: '12px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '4px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-dim)' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                  <Clock size={11} />
+                  {member.latest_action_date || member.last_contact_date || 'Görüşme yok'}
+                </span>
+                {member.latest_action_user && (
+                  <span>Sorumlu: <strong>{member.latest_action_user}</strong></span>
+                )}
+              </div>
+              <div style={{ color: member.latest_note ? 'var(--text-main)' : 'var(--text-dim)', fontStyle: member.latest_note ? 'normal' : 'italic' }}>
+                {member.latest_note ? member.latest_note : 'Henüz görüşme notu girilmemiş.'}
+              </div>
+            </div>
+
+            {/* Action Buttons: Add Note / View History */}
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button 
+                type="button"
+                className="btn btn-secondary" 
+                style={{ 
+                  flex: 1, 
+                  justifyContent: 'center', 
+                  padding: '10px', 
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  minHeight: '44px'
+                }}
+                onClick={() => onSelectMember(member)}
+              >
+                <MessageSquarePlus size={15} />
+                <span>Görüşme / Not Ekle</span>
+              </button>
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

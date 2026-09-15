@@ -2,24 +2,37 @@ export function exportToCSV(members, districtName) {
   if (!members || members.length === 0) return;
 
   const headers = [
-    'TCKN',
-    'Ad',
-    'Soyad',
+    'Adı',
+    'Soyadı',
     'Telefon',
-    'İl',
     'İlçe',
-    'Sandık Alanı',
+    'Mahalle',
+    'Seçmen İntibası',
+    'Görüşme Durumu',
+    'Son Görüşme Tarihi',
+    'Son Görüşme Notu',
+    'Sandık Alanı / Okul',
     'Sandık No',
-    'Görev Rolü',
-    'Son İşlem Tarihi',
-    'Son Açıklama / Not'
+    'TCKN'
   ];
+
+  const getStanceLabel = (stance) => {
+    switch (stance) {
+      case 'DESTEKLIYOR': return 'Destekliyor';
+      case 'KARARSIZ': return 'Kararsız';
+      case 'MESAFELI': return 'Mesafeli';
+      default: return 'Henüz Görüşülmedi';
+    }
+  };
+
+  const getContactLabel = (status) => {
+    return status === 'GORUSULDU' ? 'Görüşüldü' : 'Görüşülmedi';
+  };
 
   // Helper to escape values for CSV
   const escapeValue = (val) => {
     if (val === null || val === undefined) return '';
     let stringVal = String(val);
-    // Double quotes need to be escaped as two double quotes
     stringVal = stringVal.replace(/"/g, '""');
     if (stringVal.includes(',') || stringVal.includes('\n') || stringVal.includes('"')) {
       return `"${stringVal}"`;
@@ -28,17 +41,18 @@ export function exportToCSV(members, districtName) {
   };
 
   const rows = members.map((m) => [
-    escapeValue(m.tckn),
     escapeValue(m.first_name),
     escapeValue(m.last_name),
-    escapeValue(m.phone),
-    escapeValue(m.province),
+    escapeValue(m.phone ? `0${m.phone.replace(/\D/g, '').slice(-10)}` : '-'),
     escapeValue(m.district),
-    escapeValue(m.school),
-    escapeValue(m.ballot_no),
-    escapeValue(m.role),
-    escapeValue(m.latest_action_date || '-'),
-    escapeValue(m.latest_note || '-')
+    escapeValue(m.neighborhood || '-'),
+    escapeValue(getStanceLabel(m.vote_stance)),
+    escapeValue(getContactLabel(m.contact_status)),
+    escapeValue(m.latest_action_date || m.last_contact_date || '-'),
+    escapeValue(m.latest_note || '-'),
+    escapeValue(m.school || '-'),
+    escapeValue(m.ballot_no || '-'),
+    escapeValue(m.tckn || '-')
   ]);
 
   // Combine headers and rows

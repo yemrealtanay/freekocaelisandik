@@ -3,40 +3,41 @@ import { api } from '../utils/api';
 import { exportToCSV } from '../utils/export';
 import MemberTable from '../components/MemberTable';
 import MemberCardView from '../components/MemberCardView';
-import MemberKanban from '../components/MemberKanban';
 import MemberDetailDrawer from '../components/MemberDetailDrawer';
-import { Download, Plus, Search, View, X, MapPin, AlertCircle } from 'lucide-react';
+import { Download, Plus, Search, X, MapPin, Filter, Layers, CheckCircle2 } from 'lucide-react';
 
 const PREDEFINED_DISTRICTS = [
-  'Başiskele', 'Çayırova', 'Darıca', 'Derince', 'Dilovası', 
-  'Gebze', 'Gölcük', 'İzmit', 'Kandıra', 'Karamürsel', 'Kartepe', 'Körfez'
+  'Gölcük', 'Başiskele', 'Çayırova', 'Darıca', 'Derince', 'Dilovası', 
+  'Gebze', 'İzmit', 'Kandıra', 'Karamürsel', 'Kartepe', 'Körfez'
 ];
 
-const ROLES = [
+const STANCE_FILTERS = [
   { id: 'TUM', label: 'Tümü' },
-  { id: 'ASIL_UYE', label: 'Asil Üye' },
-  { id: 'YEDEK_UYE', label: 'Yedek Üye' },
-  { id: 'MUSAHIT', label: 'Müşahit' },
-  { id: 'YEDEK_MUSAHIT', label: 'Yedek Müşahit' },
-  { id: 'OKUL_SORUMLUSU', label: 'Okul Sorumlusu' },
-  { id: 'OKUL_YARDIMCISI', label: 'Okul Sorumlu Yardımcısı' },
-  { id: 'AVUKAT', label: 'Avukat' },
-  { id: 'KURYE', label: 'Kurye' },
-  { id: 'BILISIM', label: 'Bilişim Sorumlusu' },
-  { id: 'BOLGE_MAHALLE', label: 'Bölge/Mahalle Sorumlusu' },
-  { id: 'GOREVSIZ', label: 'Görevsiz' }
+  { id: 'GORUSULEN', label: 'Görüşülenler' },
+  { id: 'DESTEKLIYOR', label: '🟢 Destekliyor' },
+  { id: 'KARARSIZ', label: '🟡 Kararsız' },
+  { id: 'MESAFELI', label: '🔴 Mesafeli' },
+  { id: 'BELIRTILMEDI', label: '⚪ Henüz Görüşülmedi' }
 ];
 
-export default function MembersPage({ currentUser }) {
+export default function MembersPage({ currentUser, initialNeighborhood, initialStance }) {
   const isAdmin = currentUser.role === 'ADMIN';
 
   // Filters & State
   const [selectedDistrict, setSelectedDistrict] = useState(
-    isAdmin ? PREDEFINED_DISTRICTS[0] : currentUser.district
+    currentUser.district || 'Gölcük'
   );
-  const [selectedRole, setSelectedRole] = useState('TUM');
+  const [neighborhoods, setNeighborhoods] = useState([]);
+  const [selectedNeighborhood, setSelectedNeighborhood] = useState(
+    initialNeighborhood || currentUser.neighborhood || 'TUM'
+  );
+  const [selectedStance, setSelectedStance] = useState(initialStance || 'TUM');
   const [searchQuery, setSearchQuery] = useState('');
-  const [viewMode, setViewMode] = useState('Tablo'); // Tablo, Kart, Kanban
+  
+  // Responsive default view: Mobile default to 'Kart', Desktop default to 'Tablo'
+  const [viewMode, setViewMode] = useState(
+    typeof window !== 'undefined' && window.innerWidth < 768 ? 'Kart' : 'Tablo'
+  );
   
   // Data State
   const [members, setMembers] = useState([]);
@@ -55,20 +56,38 @@ export default function MembersPage({ currentUser }) {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [phone, setPhone] = useState('');
+  const [neighborhoodInput, setNeighborhoodInput] = useState(
+    currentUser.neighborhood || ''
+  );
   const [school, setSchool] = useState('');
   const [ballotNo, setBallotNo] = useState('');
   const [role, setRole] = useState('GOREVSIZ');
   const [createDistrict, setCreateDistrict] = useState(selectedDistrict);
   const [submittingMember, setSubmittingMember] = useState(false);
 
+  // Load neighborhoods when selectedDistrict changes
+  useEffect(() => {
+    fetchNeighborhoods();
+  }, [selectedDistrict]);
+
+  // Fetch members when filters change
   useEffect(() => {
     fetchMembers();
-  }, [selectedDistrict, selectedRole, searchQuery]);
+  }, [selectedDistrict, selectedNeighborhood, selectedStance, searchQuery]);
 
   // Sync create district whenever active district changes
   useEffect(() => {
     setCreateDistrict(selectedDistrict);
   }, [selectedDistrict]);
+
+  const fetchNeighborhoods = async () => {
+    try {
+      const data = await api.members.getNeighborhoods(selectedDistrict);
+      setNeighborhoods(data);
+    } catch (err) {
+      console.error('Mahalleler yüklenemedi:', err);
+    }
+  };
 
   const fetchMembers = async () => {
     setLoading(true);
@@ -76,12 +95,13 @@ export default function MembersPage({ currentUser }) {
     try {
       const data = await api.members.list({
         district: selectedDistrict,
-        role: selectedRole,
+        neighborhood: selectedNeighborhood,
+        vote_stance: selectedStance,
         search: searchQuery
       });
-      setMembers(data.members);
-      setDisplayedCount(data.displayedCount);
-      setTotalCount(data.totalCount);
+      setMembers(data.members || []);
+      setDisplayedCount(data.displayedCount || 0);
+      setTotalCount(data.totalCount || 0);
     } catch (err) {
       console.error(err);
       setErrorMsg('Üye listesi yüklenemedi.');
@@ -90,15 +110,31 @@ export default function MembersPage({ currentUser }) {
     }
   };
 
-  const handleRoleChangeInline = async (memberId, newRole) => {
-    setErrorMsg('');
-    setSuccessMsg('');
+  // Inline stance change handler with optimistic UI update
+  const handleStanceChangeInline = async (memberId, newStance) => {
+    // Optimistically update the list
+    setMembers(prevMembers =>
+      prevMembers.map(m => {
+        if (m.id === memberId) {
+          return {
+            ...m,
+            vote_stance: newStance,
+            contact_status: newStance === 'BELIRTILMEDI' ? 'GORUSULMEDI' : 'GORUSULDU',
+            last_contact_date: new Date().toISOString().split('T')[0]
+          };
+        }
+        return m;
+      })
+    );
+
     try {
-      await api.members.update(memberId, { role: newRole });
-      setSuccessMsg('Üyenin görev durumu başarıyla güncellendi.');
-      fetchMembers();
+      await api.members.update(memberId, { 
+        vote_stance: newStance,
+        contact_status: newStance === 'BELIRTILMEDI' ? 'GORUSULMEDI' : 'GORUSULDU'
+      });
     } catch (err) {
-      setErrorMsg(err.message || 'Görev durumu güncellenemedi.');
+      setErrorMsg(err.message || 'Seçmen intibası güncellenemedi.');
+      fetchMembers(); // rollback on error
     }
   };
 
@@ -118,13 +154,14 @@ export default function MembersPage({ currentUser }) {
         first_name: firstName,
         last_name: lastName,
         phone,
+        neighborhood: neighborhoodInput,
         school,
         ballot_no: ballotNo,
         role,
         district: isAdmin ? createDistrict : currentUser.district
       });
       
-      setSuccessMsg('Üye başarıyla kaydedildi.');
+      setSuccessMsg('Yeni üye başarıyla sisteme kaydedildi.');
       setCreateModalOpen(false);
       
       // Reset form
@@ -132,11 +169,13 @@ export default function MembersPage({ currentUser }) {
       setFirstName('');
       setLastName('');
       setPhone('');
+      setNeighborhoodInput(currentUser.neighborhood || '');
       setSchool('');
       setBallotNo('');
       setRole('GOREVSIZ');
       
       fetchMembers();
+      fetchNeighborhoods();
     } catch (err) {
       setErrorMsg(err.message || 'Üye kaydedilemedi.');
     } finally {
@@ -145,7 +184,7 @@ export default function MembersPage({ currentUser }) {
   };
 
   const handleExport = () => {
-    exportToCSV(members, selectedDistrict);
+    exportToCSV(members, `${selectedDistrict}_${selectedNeighborhood !== 'TUM' ? selectedNeighborhood : 'Tum_Mahalleler'}`);
   };
 
   return (
@@ -154,12 +193,15 @@ export default function MembersPage({ currentUser }) {
       <div className="page-header">
         <div className="page-title-area">
           <div className="page-title">
-            <span>Üyeler</span>
+            <span>Saha Üye Listesi</span>
             {isAdmin ? (
               <select
                 className="district-select-dropdown"
                 value={selectedDistrict}
-                onChange={(e) => setSelectedDistrict(e.target.value)}
+                onChange={(e) => {
+                  setSelectedDistrict(e.target.value);
+                  setSelectedNeighborhood('TUM');
+                }}
               >
                 {PREDEFINED_DISTRICTS.map((d) => (
                   <option key={d} value={d}>{d}</option>
@@ -170,18 +212,18 @@ export default function MembersPage({ currentUser }) {
             )}
           </div>
           <span className="page-subtitle">
-            {totalCount} üye arasından {displayedCount} üye listeleniyor
+            {totalCount} toplam üye &bull; Filtrelenen: <strong>{displayedCount}</strong> üye
           </span>
         </div>
         
         <div className="page-actions">
-          <button className="btn btn-secondary" onClick={handleExport} disabled={members.length === 0}>
+          <button className="btn btn-secondary" onClick={handleExport} disabled={members.length === 0} title="Excel olarak dışa aktar">
             <Download size={16} />
-            <span>CSV / Excel İndir</span>
+            <span className="hide-on-mobile">Excel İndir</span>
           </button>
           <button className="btn btn-primary" onClick={() => setCreateModalOpen(true)}>
             <Plus size={16} />
-            <span>Üye Ekle</span>
+            <span>Yeni Üye Ekle</span>
           </button>
         </div>
       </div>
@@ -192,20 +234,44 @@ export default function MembersPage({ currentUser }) {
       {/* Filter and Search Section */}
       <div className="filter-bar">
         
-        <div className="search-and-view">
-          <div className="search-container">
+        {/* Row 1: Search + Neighborhood Dropdown + View Switcher */}
+        <div className="search-and-view" style={{ flexWrap: 'wrap', gap: '10px' }}>
+          {/* Search Box */}
+          <div className="search-container" style={{ flex: '1 1 240px' }}>
             <Search size={18} className="search-icon" />
             <input
               type="text"
               className="form-control search-input"
-              placeholder="İsim veya telefon ara..."
+              placeholder="İsim, telefon veya mahalle ara..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
 
-          <div className="view-switcher">
-            {['Tablo', 'Kart', 'Kanban'].map((mode) => (
+          {/* Mahalle Selector */}
+          <div style={{ flex: '1 1 200px', minWidth: '180px' }}>
+            <select
+              className="form-control"
+              value={selectedNeighborhood}
+              onChange={(e) => setSelectedNeighborhood(e.target.value)}
+              style={{
+                height: '42px',
+                borderColor: selectedNeighborhood !== 'TUM' ? 'var(--primary)' : 'var(--border-color)',
+                fontWeight: selectedNeighborhood !== 'TUM' ? 600 : 400
+              }}
+            >
+              <option value="TUM">Tüm Mahalleler ({neighborhoods.length})</option>
+              {neighborhoods.map((n) => (
+                <option key={n.neighborhood} value={n.neighborhood}>
+                  {n.neighborhood} ({n.count})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* View Switcher: Kart / Tablo */}
+          <div className="view-switcher" style={{ flexShrink: 0 }}>
+            {['Kart', 'Tablo'].map((mode) => (
               <button
                 key={mode}
                 className={`view-btn ${viewMode === mode ? 'active' : ''}`}
@@ -217,59 +283,53 @@ export default function MembersPage({ currentUser }) {
           </div>
         </div>
 
-        {/* Tag Filters */}
-        <div className="tag-filters">
-          {ROLES.map((roleOpt) => (
+        {/* Row 2: Stance Filter Pills */}
+        <div className="tag-filters" style={{ overflowX: 'auto', paddingBottom: '4px' }}>
+          {STANCE_FILTERS.map((filter) => (
             <button
-              key={roleOpt.id}
-              className={`filter-tag ${selectedRole === roleOpt.id ? 'active' : ''}`}
-              onClick={() => setSelectedRole(roleOpt.id)}
+              key={filter.id}
+              className={`filter-tag ${selectedStance === filter.id ? 'active' : ''}`}
+              onClick={() => setSelectedStance(filter.id)}
             >
-              {roleOpt.label}
+              {filter.label}
             </button>
           ))}
         </div>
 
       </div>
 
-      {/* Views */}
+      {/* Main Content Area */}
       {loading ? (
-        <div style={{ color: 'var(--text-muted)', padding: '24px' }}>Yükleniyor...</div>
+        <div style={{ color: 'var(--text-muted)', padding: '36px', textAlign: 'center' }}>
+          Üyeler yükleniyor...
+        </div>
       ) : (
         <>
-          {viewMode === 'Tablo' && (
-            <MemberTable 
-              members={members} 
-              onSelectMember={setSelectedMember} 
-              onRoleChange={handleRoleChangeInline}
-            />
-          )}
-
           {viewMode === 'Kart' && (
             <MemberCardView 
               members={members} 
               onSelectMember={setSelectedMember} 
-              onRoleChange={handleRoleChangeInline}
+              onStanceChange={handleStanceChangeInline}
             />
           )}
 
-          {viewMode === 'Kanban' && (
-            <MemberKanban 
+          {viewMode === 'Tablo' && (
+            <MemberTable 
               members={members} 
               onSelectMember={setSelectedMember} 
-              onRoleChange={handleRoleChangeInline}
+              onStanceChange={handleStanceChangeInline}
             />
           )}
         </>
       )}
 
-      {/* Profile detail & Timeline Drawer */}
+      {/* Member Details Drawer (Timeline, Call, Quick Note) */}
       {selectedMember && (
         <MemberDetailDrawer
           member={selectedMember}
           onClose={() => {
             setSelectedMember(null);
-            fetchMembers(); // refresh to show updated fields in the list
+            fetchMembers();
           }}
           onUpdateSuccess={fetchMembers}
         />
@@ -278,9 +338,9 @@ export default function MembersPage({ currentUser }) {
       {/* Manual Member Creation Modal */}
       {createModalOpen && (
         <div className="modal-backdrop" onClick={() => setCreateModalOpen(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '520px' }}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '540px' }}>
             <div className="modal-header">
-              <h3 style={{ fontSize: '18px', fontWeight: 700 }}>Yeni Üye Kaydet</h3>
+              <h3 style={{ fontSize: '18px', fontWeight: 700 }}>Yeni Saha Üyesi Ekle</h3>
               <button className="drawer-close" onClick={() => setCreateModalOpen(false)}>
                 <X size={18} />
               </button>
@@ -291,7 +351,7 @@ export default function MembersPage({ currentUser }) {
                 
                 {isAdmin && (
                   <div className="form-group">
-                    <label>Kaydedilecek İlçe</label>
+                    <label>Hedef İlçe</label>
                     <select
                       className="form-control"
                       value={createDistrict}
@@ -304,9 +364,9 @@ export default function MembersPage({ currentUser }) {
                   </div>
                 )}
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                   <div className="form-group">
-                    <label>Ad</label>
+                    <label>Ad <span style={{ color: 'var(--danger)' }}>*</span></label>
                     <input
                       type="text"
                       className="form-control"
@@ -317,7 +377,7 @@ export default function MembersPage({ currentUser }) {
                     />
                   </div>
                   <div className="form-group">
-                    <label>Soyad</label>
+                    <label>Soyad <span style={{ color: 'var(--danger)' }}>*</span></label>
                     <input
                       type="text"
                       className="form-control"
@@ -329,17 +389,43 @@ export default function MembersPage({ currentUser }) {
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                   <div className="form-group">
                     <label>Telefon</label>
                     <input
-                      type="text"
+                      type="tel"
                       className="form-control"
-                      placeholder="5XX XXX XX XX"
+                      placeholder="05XX XXX XX XX"
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
                     />
                   </div>
+                  <div className="form-group">
+                    <label>Mahalle</label>
+                    {neighborhoods.length > 0 ? (
+                      <select
+                        className="form-control"
+                        value={neighborhoodInput}
+                        onChange={(e) => setNeighborhoodInput(e.target.value)}
+                      >
+                        <option value="">-- Mahalle Seçin --</option>
+                        {neighborhoods.map(n => (
+                          <option key={n.neighborhood} value={n.neighborhood}>{n.neighborhood}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="Örn: Değirmendere Merkez Mah."
+                        value={neighborhoodInput}
+                        onChange={(e) => setNeighborhoodInput(e.target.value)}
+                      />
+                    )}
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                   <div className="form-group">
                     <label>TCKN</label>
                     <input
@@ -351,25 +437,12 @@ export default function MembersPage({ currentUser }) {
                       maxLength={11}
                     />
                   </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                  <div className="form-group">
-                    <label>Sandık Alanı (Okul)</label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      placeholder="Örn: Leyla Atakan İlkokulu"
-                      value={school}
-                      onChange={(e) => setSchool(e.target.value)}
-                    />
-                  </div>
                   <div className="form-group">
                     <label>Sandık No</label>
                     <input
                       type="text"
                       className="form-control"
-                      placeholder="Örn: 2130"
+                      placeholder="Örn: 1042"
                       value={ballotNo}
                       onChange={(e) => setBallotNo(e.target.value)}
                     />
@@ -377,34 +450,24 @@ export default function MembersPage({ currentUser }) {
                 </div>
 
                 <div className="form-group">
-                  <label>Görev Rolü</label>
-                  <select
+                  <label>Sandık Alanı / Okul</label>
+                  <input
+                    type="text"
                     className="form-control"
-                    value={role}
-                    onChange={(e) => setRole(e.target.value)}
-                  >
-                    <option value="GOREVSIZ">Görevsiz</option>
-                    <option value="ASIL_UYE">Asil Üye</option>
-                    <option value="YEDEK_UYE">Yedek Üye</option>
-                    <option value="MUSAHIT">Müşahit</option>
-                    <option value="YEDEK_MUSAHIT">Yedek Müşahit</option>
-                    <option value="OKUL_SORUMLUSU">Okul Sorumlusu</option>
-                    <option value="OKUL_YARDIMCISI">Okul Sorumlu Yardımcısı</option>
-                    <option value="AVUKAT">Avukat</option>
-                    <option value="KURYE">Kurye</option>
-                    <option value="BILISIM">Bilişim Sorumlusu</option>
-                    <option value="BOLGE_MAHALLE">Bölge/Mahalle Sorumlusu</option>
-                  </select>
+                    placeholder="Örn: Değirmendere Atatürk Ortaokulu"
+                    value={school}
+                    onChange={(e) => setSchool(e.target.value)}
+                  />
                 </div>
 
               </div>
 
               <div className="modal-footer">
                 <button type="button" className="btn btn-secondary" onClick={() => setCreateModalOpen(false)}>
-                  İptal
+                  Vazgeç
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={submittingMember}>
-                  {submittingMember ? 'Kaydediliyor...' : 'Üye Kaydet'}
+                  {submittingMember ? 'Kaydediliyor...' : 'Üyeyi Kaydet'}
                 </button>
               </div>
             </form>

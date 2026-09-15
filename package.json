@@ -4,6 +4,7 @@
   "description": "Kocaeli Üye Yönetim Sistemi",
   "main": "server/index.js",
   "scripts": {
+    "postinstall": "npm install --prefix server && npm install --prefix client",
     "install:all": "npm install && npm install --prefix server && npm install --prefix client",
     "dev": "concurrently \"npm run dev --prefix server\" \"npm run dev --prefix client\"",
     "build": "npm run build --prefix client",

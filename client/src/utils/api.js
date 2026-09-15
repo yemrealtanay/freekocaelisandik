@@ -79,7 +79,7 @@ export const api = {
   },
   users: {
     list: () => request('/api/users'),
-    getDashboardStats: () => request('/api/users/dashboard-stats'),
+    getDashboardStats: (district = '') => request(`/api/users/dashboard-stats${district ? `?district=${encodeURIComponent(district)}` : ''}`),
     create: (userData) => request('/api/users', {
       method: 'POST',
       body: JSON.stringify(userData)
@@ -111,10 +111,14 @@ export const api = {
     list: (params = {}) => {
       const query = new URLSearchParams();
       if (params.district) query.append('district', params.district);
+      if (params.neighborhood) query.append('neighborhood', params.neighborhood);
+      if (params.vote_stance) query.append('vote_stance', params.vote_stance);
+      if (params.contact_status) query.append('contact_status', params.contact_status);
       if (params.role) query.append('role', params.role);
       if (params.search) query.append('search', params.search);
       return request(`/api/members?${query.toString()}`);
     },
+    getNeighborhoods: (district = '') => request(`/api/members/neighborhoods${district ? `?district=${encodeURIComponent(district)}` : ''}`),
     create: (memberData) => request('/api/members', {
       method: 'POST',
       body: JSON.stringify(memberData)

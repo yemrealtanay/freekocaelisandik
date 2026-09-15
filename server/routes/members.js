@@ -28,7 +28,8 @@ function buildSearchIndex(member) {
     member.tckn,
     member.school,
     member.ballot_no,
-    member.district
+    member.district,
+    member.neighborhood
   ];
   return parts.map(normalizeText).join(' ');
 }
@@ -39,29 +40,95 @@ function checkDistrictAccess(user, district) {
   return user.district === district;
 }
 
-// GET /api/members (List & Search & Filter, Scoped by User District)
-router.get('/', requireAuth, async (req, res) => {
-  let { district, role, search } = req.query;
-
-  // Enforce district access
+// GET /api/members/neighborhoods (List neighborhoods with counts, Scoped)
+router.get('/neighborhoods', requireAuth, async (req, res) => {
+  let { district } = req.query;
   if (req.user.role === 'USER') {
-    district = req.user.district; // Force to user's assigned district
+    district = req.user.district || 'Gölcük';
   } else if (!district) {
-    // If Admin and no district selected, default to the first district or return empty
-    // Let's require a district for the members list, or return all if admin requests.
-    // In our design, admin selects a district from a dropdown, so district is passed.
-    // If not passed, we can list all or default. Let's allow listing all if district is empty (for Admin).
+    district = 'Gölcük';
+  }
+
+  try {
+    const db = await getDb();
+    let query = `
+      SELECT neighborhood, COUNT(*) as count 
+      FROM members 
+      WHERE district = ? AND neighborhood IS NOT NULL AND neighborhood != '' 
+    `;
+    const params = [district];
+
+    if (req.user.role === 'USER' && req.user.neighborhood) {
+      query += ' AND neighborhood = ?';
+      params.push(req.user.neighborhood);
+    }
+
+    query += ' GROUP BY neighborhood ORDER BY neighborhood ASC';
+
+    const neighborhoods = await db.all(query, params);
+    res.json(neighborhoods);
+  } catch (error) {
+    console.error('List neighborhoods error:', error);
+    res.status(500).json({ message: 'Mahalleler listelenirken hata oluştu.' });
+  }
+});
+
+// GET /api/members (List & Search & Filter, Scoped by User District & Neighborhood)
+router.get('/', requireAuth, async (req, res) => {
+  let { district, role, search, neighborhood, vote_stance, contact_status } = req.query;
+
+  // Enforce district & neighborhood access
+  if (req.user.role === 'USER') {
+    district = req.user.district || 'Gölcük';
+    if (req.user.neighborhood) {
+      neighborhood = req.user.neighborhood;
+    }
+  } else if (!district) {
+    district = 'Gölcük';
   }
 
   try {
     const db = await getDb();
     
-    let query = 'SELECT m.*, (SELECT t.note FROM timeline_events t WHERE t.member_id = m.id ORDER BY t.created_at DESC LIMIT 1) as latest_note, (SELECT t.date FROM timeline_events t WHERE t.member_id = m.id ORDER BY t.created_at DESC LIMIT 1) as latest_action_date FROM members m WHERE 1=1';
+    let query = `
+      SELECT m.*, 
+        (SELECT t.note FROM timeline_events t WHERE t.member_id = m.id ORDER BY t.created_at DESC LIMIT 1) as latest_note, 
+        (SELECT t.date FROM timeline_events t WHERE t.member_id = m.id ORDER BY t.created_at DESC LIMIT 1) as latest_action_date,
+        (SELECT u.name FROM timeline_events t JOIN users u ON t.user_id = u.id WHERE t.member_id = m.id ORDER BY t.created_at DESC LIMIT 1) as latest_action_user
+      FROM members m WHERE 1=1
+    `;
     const params = [];
 
-    if (district) {
+    if (district && district !== 'ALL' && district !== 'TUM') {
       query += ' AND m.district = ?';
       params.push(district);
+    }
+
+    if (neighborhood && neighborhood !== 'TUM' && neighborhood !== 'ALL') {
+      query += ' AND m.neighborhood = ?';
+      params.push(neighborhood);
+    }
+
+    if (vote_stance && vote_stance !== 'TUM' && vote_stance !== 'ALL') {
+      if (vote_stance === 'BELIRTILMEDI') {
+        query += " AND (m.vote_stance = 'BELIRTILMEDI' OR m.vote_stance IS NULL OR m.vote_stance = '')";
+      } else if (vote_stance === 'GORUSULEN') {
+        query += " AND (m.contact_status = 'GORUSULDU' OR m.vote_stance IN ('DESTEKLIYOR', 'KARARSIZ', 'MESAFELI'))";
+      } else {
+        query += ' AND m.vote_stance = ?';
+        params.push(vote_stance);
+      }
+    }
+
+    if (contact_status && contact_status !== 'TUM' && contact_status !== 'ALL') {
+      if (contact_status === 'GORUSULDU') {
+        query += " AND (m.contact_status = 'GORUSULDU' OR m.vote_stance IN ('DESTEKLIYOR', 'KARARSIZ', 'MESAFELI'))";
+      } else if (contact_status === 'GORUSULMEDI') {
+        query += " AND (m.contact_status = 'GORUSULMEDI' OR m.contact_status IS NULL OR m.contact_status = '') AND (m.vote_stance = 'BELIRTILMEDI' OR m.vote_stance IS NULL OR m.vote_stance = '')";
+      } else {
+        query += ' AND m.contact_status = ?';
+        params.push(contact_status);
+      }
     }
 
     if (role && role !== 'TUM' && role !== 'ALL') {
@@ -84,16 +151,20 @@ router.get('/', requireAuth, async (req, res) => {
     // Also get totals for count display
     let countQuery = 'SELECT COUNT(*) as count FROM members WHERE 1=1';
     const countParams = [];
-    if (district) {
+    if (district && district !== 'ALL' && district !== 'TUM') {
       countQuery += ' AND district = ?';
       countParams.push(district);
     }
-    const totalInDistrict = await db.get(countQuery, countParams);
+    if (neighborhood && neighborhood !== 'TUM' && neighborhood !== 'ALL') {
+      countQuery += ' AND neighborhood = ?';
+      countParams.push(neighborhood);
+    }
+    const totalInFilter = await db.get(countQuery, countParams);
 
     res.json({
       members,
       displayedCount: members.length,
-      totalCount: totalInDistrict ? totalInDistrict.count : 0
+      totalCount: totalInFilter ? totalInFilter.count : members.length
     });
   } catch (error) {
     console.error('List members error:', error);
@@ -103,7 +174,7 @@ router.get('/', requireAuth, async (req, res) => {
 
 // POST /api/members (Add single member, Scoped)
 router.post('/', requireAuth, async (req, res) => {
-  const { tckn, first_name, last_name, phone, province, district, school, ballot_no, role } = req.body;
+  const { tckn, first_name, last_name, phone, province, district, neighborhood, school, ballot_no, role, vote_stance } = req.body;
 
   if (!first_name || !last_name || !district) {
     return res.status(400).json({ message: 'Ad, Soyad ve İlçe alanları zorunludur.' });
@@ -124,12 +195,13 @@ router.post('/', requireAuth, async (req, res) => {
       tckn: tckn || '',
       school: school || '',
       ballot_no: ballot_no || '',
-      district
+      district,
+      neighborhood: neighborhood || ''
     });
 
     await db.run(
-      `INSERT INTO members (id, tckn, first_name, last_name, phone, province, district, school, ballot_no, role, search_index)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO members (id, tckn, first_name, last_name, phone, province, district, neighborhood, school, ballot_no, role, vote_stance, contact_status, search_index)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         memberId,
         tckn || '',
@@ -138,9 +210,12 @@ router.post('/', requireAuth, async (req, res) => {
         phone || '',
         province || 'KOCAELİ',
         district,
+        neighborhood || '',
         school || '',
         ballot_no || '',
         role || 'GOREVSIZ',
+        vote_stance || 'BELIRTILMEDI',
+        vote_stance && vote_stance !== 'BELIRTILMEDI' ? 'GORUSULDU' : 'GORUSULMEDI',
         searchIndex
       ]
     );
@@ -150,10 +225,10 @@ router.post('/', requireAuth, async (req, res) => {
     const today = new Date().toISOString().split('T')[0];
     await db.run(
       'INSERT INTO timeline_events (id, member_id, user_id, type, date, note) VALUES (?, ?, ?, ?, ?, ?)',
-      [eventId, memberId, req.user.id, 'SYSTEM', today, 'Üye sisteme manuel olarak eklendi.']
+      [eventId, memberId, req.user.id, 'SISTEM', today, 'Üye sisteme manuel olarak eklendi.']
     );
 
-    await logAction(req, 'MEMBER_CREATE', `${first_name.toUpperCase()} ${last_name.toUpperCase()} (TCKN: ${tckn || '—'}, İlçe: ${district}) isimli üye sisteme eklendi.`);
+    await logAction(req, 'MEMBER_CREATE', `${first_name.toUpperCase()} ${last_name.toUpperCase()} (${neighborhood || district}) sisteme eklendi.`);
 
     res.status(201).json({
       message: 'Üye başarıyla eklendi.',
@@ -165,10 +240,14 @@ router.post('/', requireAuth, async (req, res) => {
   }
 });
 
-// PUT /api/members/:id (Update member details, Scoped)
+// PUT /api/members/:id (Update member details & status & stance, Scoped)
 router.put('/:id', requireAuth, async (req, res) => {
   const { id } = req.params;
-  const { tckn, first_name, last_name, phone, province, school, ballot_no, role } = req.body;
+  const { 
+    tckn, first_name, last_name, phone, province, neighborhood, 
+    school, ballot_no, role, vote_stance, contact_status, 
+    note, interaction_type 
+  } = req.body;
 
   try {
     const db = await getDb();
@@ -182,18 +261,31 @@ router.put('/:id', requireAuth, async (req, res) => {
       return res.status(403).json({ message: 'Bu üyenin bilgilerini değiştirme yetkiniz bulunmamaktadır.' });
     }
 
-    // Capture role change event if role is updated
-    let roleChangeNote = null;
-    if (role && role !== member.role) {
-      roleChangeNote = `Görev durumu güncellendi: ${member.role} -> ${role}`;
+    if (req.user.role === 'USER' && req.user.neighborhood && member.neighborhood && member.neighborhood !== req.user.neighborhood) {
+      return res.status(403).json({ message: 'Sadece kendi mahallenizdeki üyeleri güncelleyebilirsiniz.' });
     }
 
+    const today = new Date().toISOString().split('T')[0];
     const newTckn = tckn !== undefined ? tckn : member.tckn;
     const newFirstName = first_name ? first_name.toUpperCase() : member.first_name;
     const newLastName = last_name ? last_name.toUpperCase() : member.last_name;
     const newPhone = phone !== undefined ? phone : member.phone;
+    const newNeighborhood = neighborhood !== undefined ? neighborhood : member.neighborhood;
     const newSchool = school !== undefined ? school : member.school;
     const newBallotNo = ballot_no !== undefined ? ballot_no : member.ballot_no;
+    const newRole = role || member.role;
+    const newVoteStance = vote_stance !== undefined ? vote_stance : (member.vote_stance || 'BELIRTILMEDI');
+    
+    // Determine contact status and date
+    let newContactStatus = contact_status || member.contact_status || 'GORUSULMEDI';
+    let newLastContactDate = member.last_contact_date;
+
+    if (vote_stance && vote_stance !== 'BELIRTILMEDI' && (!contact_status || contact_status === 'GORUSULMEDI')) {
+      newContactStatus = 'GORUSULDU';
+      newLastContactDate = today;
+    } else if (contact_status === 'GORUSULDU') {
+      newLastContactDate = today;
+    }
     
     const searchIndex = buildSearchIndex({
       first_name: newFirstName,
@@ -202,12 +294,13 @@ router.put('/:id', requireAuth, async (req, res) => {
       tckn: newTckn,
       school: newSchool,
       ballot_no: newBallotNo,
-      district: member.district
+      district: member.district,
+      neighborhood: newNeighborhood
     });
 
     await db.run(
       `UPDATE members 
-       SET tckn = ?, first_name = ?, last_name = ?, phone = ?, province = ?, school = ?, ballot_no = ?, role = ?, search_index = ?, updated_at = CURRENT_TIMESTAMP
+       SET tckn = ?, first_name = ?, last_name = ?, phone = ?, province = ?, neighborhood = ?, school = ?, ballot_no = ?, role = ?, vote_stance = ?, contact_status = ?, last_contact_date = ?, search_index = ?, updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
       [
         newTckn,
@@ -215,30 +308,68 @@ router.put('/:id', requireAuth, async (req, res) => {
         newLastName,
         newPhone,
         province || member.province,
+        newNeighborhood,
         newSchool,
         newBallotNo,
-        role || member.role,
+        newRole,
+        newVoteStance,
+        newContactStatus,
+        newLastContactDate,
         searchIndex,
         id
       ]
     );
 
-    const today = new Date().toISOString().split('T')[0];
-    if (roleChangeNote) {
+    const stanceLabels = {
+      DESTEKLIYOR: 'Destekliyor',
+      KARARSIZ: 'Kararsız',
+      MESAFELI: 'Mesafeli',
+      BELIRTILMEDI: 'Henüz Görüşülmedi'
+    };
+
+    // If note is present
+    if (note && note.trim()) {
+      const eventId = 'event-' + Math.random().toString(36).substr(2, 9);
+      const evType = interaction_type || 'NOT';
+      let fullNote = note.trim();
+      if (vote_stance && vote_stance !== member.vote_stance) {
+        fullNote = `[İntiba: ${stanceLabels[vote_stance] || vote_stance}] ${fullNote}`;
+      }
+      await db.run(
+        'INSERT INTO timeline_events (id, member_id, user_id, type, date, note) VALUES (?, ?, ?, ?, ?, ?)',
+        [eventId, id, req.user.id, evType, today, fullNote]
+      );
+    } else if (vote_stance && vote_stance !== member.vote_stance) {
+      // Just stance changed inline without custom note
+      const oldLabel = stanceLabels[member.vote_stance] || member.vote_stance;
+      const newLabel = stanceLabels[vote_stance] || vote_stance;
       const eventId = 'event-' + Math.random().toString(36).substr(2, 9);
       await db.run(
         'INSERT INTO timeline_events (id, member_id, user_id, type, date, note) VALUES (?, ?, ?, ?, ?, ?)',
-        [eventId, id, req.user.id, 'ROLE_CHANGE', today, roleChangeNote]
+        [eventId, id, req.user.id, 'DURUM_DEGISIKLIGI', today, `Seçmen intibası güncellendi: ${oldLabel} ➡️ ${newLabel}`]
       );
     }
 
-    let auditDetails = `${newFirstName} ${newLastName} (İlçe: ${member.district}) bilgileri güncellendi.`;
-    if (roleChangeNote) {
-      auditDetails += ` (${roleChangeNote})`;
+    if (role && role !== member.role) {
+      const eventId = 'event-' + Math.random().toString(36).substr(2, 9);
+      await db.run(
+        'INSERT INTO timeline_events (id, member_id, user_id, type, date, note) VALUES (?, ?, ?, ?, ?, ?)',
+        [eventId, id, req.user.id, 'GOREV_DEGISIKLIGI', today, `Görev durumu güncellendi: ${member.role} ➡️ ${role}`]
+      );
     }
-    await logAction(req, 'MEMBER_UPDATE', auditDetails);
 
-    res.json({ message: 'Üye bilgileri başarıyla güncellendi.' });
+    await logAction(req, 'MEMBER_UPDATE', `${newFirstName} ${newLastName} (${newNeighborhood || member.district}) bilgileri güncellendi.`);
+
+    res.json({ 
+      message: 'Üye bilgileri başarıyla güncellendi.',
+      member: {
+        id,
+        vote_stance: newVoteStance,
+        contact_status: newContactStatus,
+        last_contact_date: newLastContactDate,
+        neighborhood: newNeighborhood
+      }
+    });
   } catch (error) {
     console.error('Update member error:', error);
     res.status(500).json({ message: 'Üye güncellenirken hata oluştu.' });

@@ -37,10 +37,10 @@ export default function Sidebar({ activeTab, onTabChange, isOpen, onClose }) {
       {isOpen && <div className="sidebar-backdrop" onClick={onClose}></div>}
       <aside className={`sidebar ${isOpen ? 'open' : ''}`}>
         <div className="sidebar-logo-area">
-          <span className="logo-badge">I</span>
+          <span className="logo-badge" style={{ backgroundColor: 'var(--primary)' }}>G</span>
           <div className="logo-text">
-            <strong>Intra-K</strong>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>İç İletişim Portalı</div>
+            <strong>Gölcük Saha</strong>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Üye & Saha Yönetimi</div>
           </div>
         </div>
         <nav className="sidebar-menu">

@@ -8,18 +8,23 @@ import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import AsyncUploadStatus from './components/AsyncUploadStatus';
 import { api } from './utils/api';
+import { LayoutDashboard, Users, UserCheck, FileSpreadsheet, LogOut } from 'lucide-react';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
   
-  // Navigation active tab (used for Admins only)
-  const [activeTab, setActiveTab] = useState('dashboard');
+  // Navigation active tab: 'dashboard', 'members', 'users', 'upload'
+  const [activeTab, setActiveTab] = useState('members');
   
+  // Filter drilldown from dashboard to members
+  const [targetNeighborhood, setTargetNeighborhood] = useState(null);
+  const [targetStance, setTargetStance] = useState(null);
+
   // Active background upload ID tracker
   const [activeUploadId, setActiveUploadId] = useState(null);
   
-  // Mobile sidebar visibility state
+  // Mobile sidebar visibility state (for Admins)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   // Check auth state on mount
@@ -32,7 +37,6 @@ export default function App() {
     try {
       const user = await api.auth.me();
       setCurrentUser(user);
-      // For Admin, default to dashboard. For regular User, they only have the members list view
       if (user.role === 'ADMIN') {
         setActiveTab('dashboard');
       } else {
@@ -61,6 +65,12 @@ export default function App() {
     setActiveUploadId(null);
   };
 
+  const handleNavigateToMembers = (neighborhood, stance) => {
+    setTargetNeighborhood(neighborhood);
+    setTargetStance(stance);
+    setActiveTab('members');
+  };
+
   if (loading) {
     return (
       <div style={{
@@ -87,7 +97,7 @@ export default function App() {
 
   return (
     <div className={`app-layout ${!isAdmin ? 'no-sidebar' : ''}`}>
-      {/* Sidebar - Admin only */}
+      {/* Desktop & Mobile Sidebar - Admin only */}
       {isAdmin && (
         <Sidebar 
           activeTab={activeTab} 
@@ -106,21 +116,83 @@ export default function App() {
           user={currentUser} 
           onLogout={handleLogout} 
           onToggleSidebar={() => setMobileSidebarOpen(!mobileSidebarOpen)} 
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
         />
         
         {/* Render active tabs/screens */}
-        {isAdmin ? (
-          <>
-            {activeTab === 'dashboard' && <Dashboard />}
-            {activeTab === 'users' && <UsersList currentUser={currentUser} />}
-            {activeTab === 'members' && <MembersPage currentUser={currentUser} />}
-            {activeTab === 'upload' && (
-              <UploadPage onUploadStart={(id) => setActiveUploadId(id)} />
-            )}
-          </>
-        ) : (
-          <MembersPage currentUser={currentUser} />
+        {activeTab === 'dashboard' && (
+          <Dashboard 
+            currentUser={currentUser} 
+            onNavigateToMembers={handleNavigateToMembers} 
+          />
         )}
+        
+        {activeTab === 'members' && (
+          <MembersPage 
+            currentUser={currentUser} 
+            initialNeighborhood={targetNeighborhood}
+            initialStance={targetStance}
+          />
+        )}
+
+        {isAdmin && activeTab === 'users' && (
+          <UsersList currentUser={currentUser} />
+        )}
+
+        {isAdmin && activeTab === 'upload' && (
+          <UploadPage onUploadStart={(id) => setActiveUploadId(id)} />
+        )}
+      </div>
+
+      {/* Mobile Bottom Navigation Bar (Rock-solid for phone usage) */}
+      <div className="mobile-bottom-nav">
+        <button 
+          className={`mobile-nav-item ${activeTab === 'members' ? 'active' : ''}`}
+          onClick={() => {
+            setTargetNeighborhood(null);
+            setTargetStance(null);
+            setActiveTab('members');
+          }}
+        >
+          <UserCheck size={20} />
+          <span>Üyeler</span>
+        </button>
+
+        <button 
+          className={`mobile-nav-item ${activeTab === 'dashboard' ? 'active' : ''}`}
+          onClick={() => setActiveTab('dashboard')}
+        >
+          <LayoutDashboard size={20} />
+          <span>Genel Bakış</span>
+        </button>
+
+        {isAdmin && (
+          <>
+            <button 
+              className={`mobile-nav-item ${activeTab === 'users' ? 'active' : ''}`}
+              onClick={() => setActiveTab('users')}
+            >
+              <Users size={20} />
+              <span>Sorumlular</span>
+            </button>
+            <button 
+              className={`mobile-nav-item ${activeTab === 'upload' ? 'active' : ''}`}
+              onClick={() => setActiveTab('upload')}
+            >
+              <FileSpreadsheet size={20} />
+              <span>Excel</span>
+            </button>
+          </>
+        )}
+
+        <button 
+          className="mobile-nav-item"
+          onClick={handleLogout}
+        >
+          <LogOut size={20} style={{ color: 'var(--danger)' }} />
+          <span style={{ color: 'var(--danger)' }}>Çıkış</span>
+        </button>
       </div>
 
       {/* Floating progress indicator for active uploads */}
@@ -128,9 +200,6 @@ export default function App() {
         <AsyncUploadStatus 
           uploadId={activeUploadId}
           onComplete={(status) => {
-            // Once excel import completes, we trigger a refresh.
-            // If the user is currently on the members view, they will see imported records.
-            // We can refresh the page or rely on components handling the mount updates.
             console.log(`Excel background job finished with status: ${status}`);
           }}
           onDismiss={() => setActiveUploadId(null)}

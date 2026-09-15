@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
-const { getDb } = require('../db');
+const { getDb, dbPath } = require('../db');
 const { requireAdmin } = require('../auth');
 const { logAction } = require('../logger');
 
@@ -9,7 +9,7 @@ const { logAction } = require('../logger');
 router.get('/', requireAdmin, async (req, res) => {
   try {
     const db = await getDb();
-    const users = await db.all('SELECT id, name, email, district, role, status, created_at FROM users ORDER BY created_at DESC');
+    const users = await db.all('SELECT id, name, email, district, neighborhood, role, status, created_at FROM users ORDER BY created_at DESC');
     res.json(users);
   } catch (error) {
     console.error('List users error:', error);
@@ -19,7 +19,7 @@ router.get('/', requireAdmin, async (req, res) => {
 
 // POST /api/users (Create user, Admin only)
 router.post('/', requireAdmin, async (req, res) => {
-  const { name, email, password, district, role } = req.body;
+  const { name, email, password, district, neighborhood, role } = req.body;
 
   if (!name || !email || !password || !role) {
     return res.status(400).json({ message: 'Ad soyad, e-posta, şifre ve rol zorunludur.' });
@@ -34,19 +34,19 @@ router.post('/', requireAdmin, async (req, res) => {
 
     const userId = 'user-' + Math.random().toString(36).substr(2, 9);
     const passwordHash = await bcrypt.hash(password, 10);
-    // If role is ADMIN, district should be null. If role is USER, district can be specified.
-    const userDistrict = role === 'ADMIN' ? null : district;
+    const userDistrict = role === 'ADMIN' ? null : (district || 'Gölcük');
+    const userNeighborhood = role === 'ADMIN' ? null : (neighborhood || null);
 
     await db.run(
-      'INSERT INTO users (id, name, email, password_hash, district, role, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [userId, name, email, passwordHash, userDistrict, role, 'ACTIVE']
+      'INSERT INTO users (id, name, email, password_hash, district, neighborhood, role, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [userId, name, email, passwordHash, userDistrict, userNeighborhood, role, 'ACTIVE']
     );
 
-    await logAction(req, 'USER_CREATE', `${name} (${email}) isimli kullanıcı oluşturuldu. Rol: ${role}, Sorumlu İlçe: ${userDistrict || 'Hepsi'}`);
+    await logAction(req, 'USER_CREATE', `${name} (${email}) kullanıcısı oluşturuldu. Rol: ${role}, İlçe: ${userDistrict || 'Hepsi'}, Mahalle: ${userNeighborhood || 'Tümü'}`);
 
     res.status(201).json({
       message: 'Kullanıcı başarıyla oluşturuldu.',
-      user: { id: userId, name, email, district: userDistrict, role, status: 'ACTIVE' }
+      user: { id: userId, name, email, district: userDistrict, neighborhood: userNeighborhood, role, status: 'ACTIVE' }
     });
   } catch (error) {
     console.error('Create user error:', error);
@@ -113,94 +113,127 @@ router.delete('/:id', requireAdmin, async (req, res) => {
   }
 });
 
-// GET /api/users/dashboard-stats (Get DB statistics, Admin only)
-router.get('/dashboard-stats', requireAdmin, async (req, res) => {
+// GET /api/users/dashboard-stats (Get DB statistics, Available to authenticated users)
+const { requireAuth } = require('../auth');
+router.get('/dashboard-stats', requireAuth, async (req, res) => {
   try {
     const db = await getDb();
-    
-    // 1. Total User Count
-    const userCount = await db.get('SELECT COUNT(*) as count FROM users');
-    
-    // 2. Total Member Count
-    const memberCount = await db.get('SELECT COUNT(*) as count FROM members');
-    
-    // 3. Role Breakdown
-    const roleStats = await db.all('SELECT role, COUNT(*) as count FROM members GROUP BY role');
-    const roleBreakdown = {
-      GOREVSIZ: 0,
-      ASIL_UYE: 0,
-      YEDEK_UYE: 0,
-      MUSAHIT: 0,
-      YEDEK_MUSAHIT: 0,
-      OKUL_SORUMLUSU: 0,
-      OKUL_YARDIMCISI: 0,
-      AVUKAT: 0,
-      KURYE: 0,
-      BILISIM: 0,
-      BOLGE_MAHALLE: 0
-    };
-    roleStats.forEach(r => {
-      roleBreakdown[r.role] = r.count;
-    });
+    let { district } = req.query;
 
-    // 4. PREDEFINED Kocaeli Districts
-    const DISTRICTS = [
-      'Başiskele', 'Çayırova', 'Darıca', 'Derince', 'Dilovası', 
-      'Gebze', 'Gölcük', 'İzmit', 'Kandıra', 'Karamürsel', 'Kartepe', 'Körfez'
-    ];
-
-    function turkishToLower(str) {
-      if (!str) return '';
-      return str
-        .replace(/İ/g, 'i')
-        .replace(/I/g, 'ı')
-        .replace(/Ş/g, 'ş')
-        .replace(/Ç/g, 'ç')
-        .replace(/Ğ/g, 'ğ')
-        .replace(/Ü/g, 'ü')
-        .replace(/Ö/g, 'ö')
-        .toLowerCase();
+    if (req.user.role === 'USER') {
+      district = req.user.district || 'Gölcük';
+    } else if (!district) {
+      district = 'Gölcük';
     }
 
-    // 5. Member Counts per District
-    const districtStats = await db.all('SELECT district, COUNT(*) as count FROM members GROUP BY district');
+    const isUser = req.user.role === 'USER';
+    const userNeighborhood = isUser ? req.user.neighborhood : null;
+
+    let whereClause = 'district = ?';
+    let queryParams = [district];
+
+    if (userNeighborhood) {
+      whereClause += ' AND neighborhood = ?';
+      queryParams.push(userNeighborhood);
+    }
+
+    // 1. Total User Count (Admin only)
+    let totalUsers = 0;
+    if (!isUser) {
+      const userCount = await db.get('SELECT COUNT(*) as count FROM users');
+      totalUsers = userCount ? userCount.count : 0;
+    }
     
-    // 6. Assigned Member Counts per District (role !== 'GOREVSIZ')
-    const districtAssignedStats = await db.all("SELECT district, COUNT(*) as count FROM members WHERE role != 'GOREVSIZ' GROUP BY district");
+    // 2. Total Member Count for target district/neighborhood
+    const memberCount = await db.get(
+      `SELECT COUNT(*) as count FROM members WHERE ${whereClause}`,
+      queryParams
+    );
+    const totalMembers = memberCount ? memberCount.count : 0;
 
-    // 7. Responsible Member Counts per District (roles that are responsibles)
-    const districtResponsiblesStats = await db.all(`
-      SELECT district, COUNT(*) as count 
-      FROM members 
-      WHERE role IN ('OKUL_SORUMLUSU', 'OKUL_SORUMLU_YARDIMCISI', 'BILISIM', 'BOLGE_MAHALLE') 
-      GROUP BY district
-    `);
-
-    // 8. User Counts per District
-    const districtUsersStats = await db.all('SELECT district, COUNT(*) as count FROM users WHERE role = "USER" GROUP BY district');
-
-    // Combine stats per district
-    const districtsData = DISTRICTS.map(distName => {
-      const distNameLower = turkishToLower(distName);
-      const memStat = districtStats.find(d => d.district && turkishToLower(d.district) === distNameLower) || { count: 0 };
-      const assignedStat = districtAssignedStats.find(d => d.district && turkishToLower(d.district) === distNameLower) || { count: 0 };
-      const respStat = districtResponsiblesStats.find(d => d.district && turkishToLower(d.district) === distNameLower) || { count: 0 };
-      const userStat = districtUsersStats.find(d => d.district && turkishToLower(d.district) === distNameLower) || { count: 0 };
-      
-      return {
-        district: distName,
-        membersCount: memStat.count,
-        assignedCount: assignedStat.count,
-        responsiblesCount: respStat.count,
-        usersCount: userStat.count
-      };
+    // 3. Stance counts
+    const stanceRows = await db.all(
+      `SELECT vote_stance, COUNT(*) as count FROM members WHERE ${whereClause} GROUP BY vote_stance`,
+      queryParams
+    );
+    const stanceBreakdown = {
+      DESTEKLIYOR: 0,
+      KARARSIZ: 0,
+      MESAFELI: 0,
+      BELIRTILMEDI: 0
+    };
+    stanceRows.forEach(r => {
+      if (r.vote_stance && stanceBreakdown[r.vote_stance] !== undefined) {
+        stanceBreakdown[r.vote_stance] = r.count;
+      } else {
+        stanceBreakdown.BELIRTILMEDI += r.count;
+      }
     });
 
+    // 4. Contacted vs Not Contacted
+    const contactedResult = await db.get(
+      `SELECT COUNT(*) as count FROM members 
+       WHERE ${whereClause} AND (contact_status = 'GORUSULDU' OR vote_stance IN ('DESTEKLIYOR', 'KARARSIZ', 'MESAFELI'))`,
+      queryParams
+    );
+    const contactedMembers = contactedResult ? contactedResult.count : 0;
+    const notContactedMembers = Math.max(0, totalMembers - contactedMembers);
+    const contactRate = totalMembers > 0 ? Math.round((contactedMembers / totalMembers) * 100) : 0;
+
+    // 5. Neighborhood Breakdown
+    const neighborhoodRows = await db.all(`
+      SELECT 
+        neighborhood,
+        COUNT(*) as total_members,
+        SUM(CASE WHEN contact_status = 'GORUSULDU' OR vote_stance IN ('DESTEKLIYOR', 'KARARSIZ', 'MESAFELI') THEN 1 ELSE 0 END) as contacted_count,
+        SUM(CASE WHEN vote_stance = 'DESTEKLIYOR' THEN 1 ELSE 0 END) as destekliyor_count,
+        SUM(CASE WHEN vote_stance = 'KARARSIZ' THEN 1 ELSE 0 END) as kararsiz_count,
+        SUM(CASE WHEN vote_stance = 'MESAFELI' THEN 1 ELSE 0 END) as mesafeli_count,
+        SUM(CASE WHEN vote_stance = 'BELIRTILMEDI' OR vote_stance IS NULL THEN 1 ELSE 0 END) as belirtilmedi_count
+      FROM members 
+      WHERE ${whereClause} AND neighborhood IS NOT NULL AND neighborhood != ''
+      GROUP BY neighborhood
+      ORDER BY total_members DESC, neighborhood ASC
+    `, queryParams);
+
+    // 6. Representative Activity Statistics
+    // Admins see all representatives. Mahalle Sorumlulari only see their own performance.
+    let repQuery = `
+      SELECT 
+        u.id as user_id, 
+        u.name as user_name, 
+        u.email as user_email, 
+        u.neighborhood as user_neighborhood, 
+        u.district as user_district,
+        u.role as user_role,
+        COUNT(t.id) as total_interactions,
+        COUNT(DISTINCT t.member_id) as unique_members_contacted,
+        MAX(t.date) as last_active_date
+      FROM users u
+      LEFT JOIN timeline_events t ON t.user_id = u.id AND t.type NOT IN ('SYSTEM', 'SISTEM')
+    `;
+    const repParams = [];
+
+    if (isUser) {
+      repQuery += ' WHERE u.id = ?';
+      repParams.push(req.user.id);
+    }
+
+    repQuery += ' GROUP BY u.id ORDER BY total_interactions DESC, u.name ASC';
+    const representativeRows = await db.all(repQuery, repParams);
+
     res.json({
-      totalUsers: userCount.count,
-      totalMembers: memberCount.count,
-      roleBreakdown,
-      districtsData
+      district,
+      neighborhood: userNeighborhood || null,
+      isNeighborhoodScoped: !!userNeighborhood,
+      totalUsers,
+      totalMembers,
+      contactedMembers,
+      notContactedMembers,
+      contactRate,
+      stanceBreakdown,
+      neighborhoodsData: neighborhoodRows,
+      representativeStats: representativeRows
     });
   } catch (error) {
     console.error('Dashboard stats error:', error);
@@ -210,10 +243,7 @@ router.get('/dashboard-stats', requireAdmin, async (req, res) => {
 
 // GET /api/users/download-db (Download SQLite DB file, Admin only)
 router.get('/download-db', requireAdmin, async (req, res) => {
-  const path = require('path');
   const fs = require('fs');
-  const dbPath = path.join(__dirname, '../data/db.sqlite');
-  
   if (fs.existsSync(dbPath)) {
     res.download(dbPath, `sandik_yedek_${new Date().toISOString().split('T')[0]}.sqlite`);
   } else {

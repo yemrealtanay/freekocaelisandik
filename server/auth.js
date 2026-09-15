@@ -10,7 +10,8 @@ function generateToken(user) {
       email: user.email,
       name: user.name,
       role: user.role,
-      district: user.district
+      district: user.district,
+      neighborhood: user.neighborhood || null
     },
     JWT_SECRET,
     { expiresIn: '7d' }
