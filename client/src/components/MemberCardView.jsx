@@ -33,7 +33,7 @@ export default function MemberCardView({ members, onSelectMember, onStanceChange
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', margin: '16px 0' }}>
+    <div className="member-card-list">
       {members.map((member) => {
         const cleanPhone = member.phone ? member.phone.replace(/\D/g, '') : '';
         const rawStance = member.vote_stance || 'BELIRTILMEDI';
@@ -42,7 +42,7 @@ export default function MemberCardView({ members, onSelectMember, onStanceChange
           <div key={member.id} className="mobile-card">
             {/* Top Bar: Name & Mahalle */}
             <div className="mobile-card-header">
-              <div style={{ flex: 1 }}>
+              <div style={{ flex: 1, minWidth: 0, cursor: 'pointer' }} onClick={() => onSelectMember(member)}>
                 <div className="mobile-card-title">
                   {member.first_name} {member.last_name}
                 </div>
@@ -139,7 +139,7 @@ export default function MemberCardView({ members, onSelectMember, onStanceChange
               flexDirection: 'column',
               gap: '4px'
             }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-dim)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '4px 12px', color: 'var(--text-dim)' }}>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                   <Clock size={11} />
                   {member.latest_action_date || member.last_contact_date || 'Görüşme yok'}

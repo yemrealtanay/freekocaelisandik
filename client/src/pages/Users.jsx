@@ -186,15 +186,22 @@ export default function UsersList({ currentUser }) {
           </span>
         </div>
         {activeSubTab === 'users' && (
-          <button className="btn btn-primary" onClick={() => setModalOpen(true)}>
+          <button className="btn btn-primary hide-on-mobile" onClick={() => setModalOpen(true)}>
             <Plus size={16} />
             <span>Yeni Sorumlu Ekle</span>
           </button>
         )}
       </div>
 
+      {/* Mobile floating action button */}
+      {activeSubTab === 'users' && (
+        <button className="fab" onClick={() => setModalOpen(true)} aria-label="Yeni Sorumlu Ekle">
+          <Plus size={24} />
+        </button>
+      )}
+
       {/* Sub-tab Switcher */}
-      <div className="view-switcher" style={{ marginBottom: '24px', width: 'fit-content' }}>
+      <div className="view-switcher subtab-switcher">
         <button 
           className={`view-btn ${activeSubTab === 'users' ? 'active' : ''}`}
           onClick={() => setActiveSubTab('users')}
@@ -217,7 +224,7 @@ export default function UsersList({ currentUser }) {
           <div style={{ color: 'var(--text-muted)', padding: '24px' }}>Yükleniyor...</div>
         ) : (
           <div className="table-container">
-            <table className="custom-table">
+            <table className="custom-table responsive-table">
               <thead>
                 <tr>
                   <th>Ad Soyad</th>
@@ -231,11 +238,11 @@ export default function UsersList({ currentUser }) {
               <tbody>
                 {users.map((u) => (
                   <tr key={u.id}>
-                    <td style={{ fontWeight: 600 }}>
+                    <td className="cell-primary" style={{ fontWeight: 600 }}>
                       {u.name} {u.id === currentUser.id && <span style={{ color: 'var(--text-dim)', fontSize: '11px', fontWeight: 'normal' }}>(Siz)</span>}
                     </td>
-                    <td>{u.email}</td>
-                    <td>
+                    <td className="cell-full" data-label="E-posta">{u.email}</td>
+                    <td data-label="Sorumluluk Alanı">
                       {u.role === 'ADMIN' ? (
                         <span style={{ color: 'var(--text-dim)', fontSize: '13px' }}>&mdash; (Tüm İl ve İlçeler)</span>
                       ) : (
@@ -252,7 +259,7 @@ export default function UsersList({ currentUser }) {
                         </div>
                       )}
                     </td>
-                    <td>
+                    <td data-label="Rol">
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}>
                         {u.role === 'ADMIN' ? (
                           <>
@@ -264,7 +271,7 @@ export default function UsersList({ currentUser }) {
                         )}
                       </span>
                     </td>
-                    <td>
+                    <td data-label="Durum">
                       <span style={{ 
                         color: u.status === 'ACTIVE' ? 'var(--success)' : 'var(--text-dim)', 
                         fontWeight: 600,
@@ -282,7 +289,7 @@ export default function UsersList({ currentUser }) {
                         {u.status === 'ACTIVE' ? 'Aktif' : 'Pasif'}
                       </span>
                     </td>
-                    <td style={{ textAlign: 'right' }}>
+                    <td className="cell-actions" style={{ textAlign: 'right' }}>
                       <div style={{ display: 'inline-flex', gap: '8px', justifyContent: 'flex-end' }}>
                         <button 
                           className={`btn ${u.status === 'ACTIVE' ? 'btn-secondary' : 'btn-primary'}`}
@@ -314,7 +321,7 @@ export default function UsersList({ currentUser }) {
           <div style={{ color: 'var(--text-muted)', padding: '24px' }}>Yükleniyor...</div>
         ) : (
           <div className="table-container">
-            <table className="custom-table">
+            <table className="custom-table responsive-table">
               <thead>
                 <tr>
                   <th>Tarih</th>
@@ -335,16 +342,16 @@ export default function UsersList({ currentUser }) {
                 ) : (
                   logs.map((log) => (
                     <tr key={log.id}>
-                      <td style={{ whiteSpace: 'nowrap', fontSize: '13px' }}>{formatDateTime(log.created_at)}</td>
-                      <td style={{ fontWeight: 600 }}>{log.user_name}</td>
-                      <td>{log.user_email}</td>
-                      <td>
+                      <td data-label="Tarih" style={{ whiteSpace: 'nowrap', fontSize: '13px' }}>{formatDateTime(log.created_at)}</td>
+                      <td className="cell-primary" style={{ fontWeight: 600 }}>{log.user_name}</td>
+                      <td className="cell-full" data-label="E-posta">{log.user_email}</td>
+                      <td data-label="İşlem Türü">
                         <span className={`role-badge ${log.action_type}`}>
                           {getActionTypeLabel(log.action_type)}
                         </span>
                       </td>
-                      <td style={{ color: 'var(--text-main)', fontSize: '13px', lineHeight: '1.4' }}>{log.details}</td>
-                      <td style={{ fontFamily: 'monospace', fontSize: '12px', color: 'var(--text-muted)' }}>{log.ip_address || '—'}</td>
+                      <td className="cell-full" data-label="Açıklama" style={{ color: 'var(--text-main)', fontSize: '13px', lineHeight: '1.4' }}>{log.details}</td>
+                      <td data-label="IP Adresi" style={{ fontFamily: 'monospace', fontSize: '12px', color: 'var(--text-muted)' }}>{log.ip_address || '—'}</td>
                     </tr>
                   ))
                 )}
@@ -358,6 +365,7 @@ export default function UsersList({ currentUser }) {
       {modalOpen && (
         <div className="modal-backdrop" onClick={() => setModalOpen(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+            <div className="sheet-handle" />
             <div className="modal-header">
               <h3 style={{ fontSize: '18px', fontWeight: 700 }}>Yeni Sorumlu Ekle</h3>
               <button className="drawer-close" onClick={() => setModalOpen(false)}>

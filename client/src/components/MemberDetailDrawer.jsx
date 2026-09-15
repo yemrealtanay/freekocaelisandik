@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, Plus, Phone, Calendar, User, Info, FileText, CheckCircle2, Trash2, PhoneCall, MapPin, MessageSquare } from 'lucide-react';
+import { X, ArrowLeft, Save, Plus, Phone, Calendar, User, Info, FileText, CheckCircle2, Trash2, PhoneCall, MapPin, MessageSquare } from 'lucide-react';
 import { api } from '../utils/api';
 import { formatPhone } from './MemberTable';
 
@@ -188,6 +188,9 @@ export default function MemberDetailDrawer({ member, onClose, onUpdateSuccess })
         
         {/* Drawer Top Header */}
         <div className="drawer-header">
+          <button className="drawer-back mobile-only" onClick={onClose} aria-label="Geri">
+            <ArrowLeft size={20} />
+          </button>
           <div className="drawer-title-area">
             <div className="drawer-title">{firstName} {lastName}</div>
             <div style={{ fontSize: '13px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginTop: '4px' }}>
@@ -202,18 +205,17 @@ export default function MemberDetailDrawer({ member, onClose, onUpdateSuccess })
               </span>
             </div>
           </div>
-          <button className="drawer-close" onClick={onClose} title="Kapat">
+          <button className="drawer-close hide-on-mobile" onClick={onClose} title="Kapat">
             <X size={20} />
           </button>
         </div>
 
         {/* Quick Call Bar on Mobile */}
         {cleanPhone && (
-          <div style={{ padding: '0 24px 16px' }}>
+          <div className="drawer-call-bar">
             <a 
               href={`tel:${cleanPhone}`} 
               className="btn-call-direct"
-              style={{ padding: '10px 16px' }}
             >
               <PhoneCall size={18} />
               <span>{formatPhone(phone)} &mdash; Hemen Ara</span>
@@ -222,43 +224,27 @@ export default function MemberDetailDrawer({ member, onClose, onUpdateSuccess })
         )}
 
         {/* Tab Swapping inside Drawer */}
-        <div style={{ display: 'flex', borderBottom: '1px solid var(--border-color)', margin: '0 24px 20px' }}>
+        <div className="drawer-tabs">
           <button
+            type="button"
+            className={`drawer-tab ${activeSubTab === 'timeline' ? 'active' : ''}`}
             onClick={() => setActiveSubTab('timeline')}
-            style={{
-              padding: '12px 18px',
-              background: 'none',
-              border: 'none',
-              color: activeSubTab === 'timeline' ? 'var(--primary)' : 'var(--text-muted)',
-              borderBottom: activeSubTab === 'timeline' ? '2px solid var(--primary)' : 'none',
-              fontWeight: 600,
-              fontSize: '14px',
-              cursor: 'pointer'
-            }}
           >
             Görüşmeler & Notlar
           </button>
           <button
+            type="button"
+            className={`drawer-tab ${activeSubTab === 'edit' ? 'active' : ''}`}
             onClick={() => setActiveSubTab('edit')}
-            style={{
-              padding: '12px 18px',
-              background: 'none',
-              border: 'none',
-              color: activeSubTab === 'edit' ? 'var(--primary)' : 'var(--text-muted)',
-              borderBottom: activeSubTab === 'edit' ? '2px solid var(--primary)' : 'none',
-              fontWeight: 600,
-              fontSize: '14px',
-              cursor: 'pointer'
-            }}
           >
             Bilgileri Düzenle
           </button>
         </div>
 
-        {errorMsg && <div className="toast-msg error" style={{ margin: '0 24px 16px' }}>{errorMsg}</div>}
-        {successMsg && <div className="toast-msg success" style={{ margin: '0 24px 16px' }}>{successMsg}</div>}
+        {errorMsg && <div className="toast-msg error">{errorMsg}</div>}
+        {successMsg && <div className="toast-msg success">{successMsg}</div>}
 
-        <div className="drawer-body" style={{ padding: '0 24px 24px', overflowY: 'auto' }}>
+        <div className="drawer-body">
           {activeSubTab === 'edit' ? (
             /* Member Edit Form */
             <form onSubmit={handleUpdateMember}>
@@ -373,7 +359,7 @@ export default function MemberDetailDrawer({ member, onClose, onUpdateSuccess })
                 />
               </div>
 
-              <div style={{ display: 'flex', gap: '12px', marginTop: '20px' }}>
+              <div className="form-actions" style={{ marginTop: '20px' }}>
                 <button
                   type="submit"
                   className="btn btn-primary"

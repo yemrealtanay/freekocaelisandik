@@ -4,6 +4,7 @@ import { exportToCSV } from '../utils/export';
 import MemberTable from '../components/MemberTable';
 import MemberCardView from '../components/MemberCardView';
 import MemberDetailDrawer from '../components/MemberDetailDrawer';
+import { useIsMobile } from '../hooks/useMediaQuery';
 import { Download, Plus, Search, X, MapPin, Filter, Layers, CheckCircle2 } from 'lucide-react';
 
 const PREDEFINED_DISTRICTS = [
@@ -34,10 +35,10 @@ export default function MembersPage({ currentUser, initialNeighborhood, initialS
   const [selectedStance, setSelectedStance] = useState(initialStance || 'TUM');
   const [searchQuery, setSearchQuery] = useState('');
   
-  // Responsive default view: Mobile default to 'Kart', Desktop default to 'Tablo'
-  const [viewMode, setViewMode] = useState(
-    typeof window !== 'undefined' && window.innerWidth < 768 ? 'Kart' : 'Tablo'
-  );
+  // Desktop view preference; on mobile the card view is always enforced (live, follows resize/rotation)
+  const isMobile = useIsMobile();
+  const [viewMode, setViewMode] = useState('Tablo');
+  const effectiveViewMode = isMobile ? 'Kart' : viewMode;
   
   // Data State
   const [members, setMembers] = useState([]);
@@ -217,16 +218,21 @@ export default function MembersPage({ currentUser, initialNeighborhood, initialS
         </div>
         
         <div className="page-actions">
-          <button className="btn btn-secondary" onClick={handleExport} disabled={members.length === 0} title="Excel olarak dışa aktar">
+          <button className="btn btn-secondary" onClick={handleExport} disabled={members.length === 0} title="Excel olarak dışa aktar" aria-label="Excel İndir">
             <Download size={16} />
-            <span className="hide-on-mobile">Excel İndir</span>
+            <span className="btn-label">Excel İndir</span>
           </button>
-          <button className="btn btn-primary" onClick={() => setCreateModalOpen(true)}>
+          <button className="btn btn-primary hide-on-mobile" onClick={() => setCreateModalOpen(true)}>
             <Plus size={16} />
             <span>Yeni Üye Ekle</span>
           </button>
         </div>
       </div>
+
+      {/* Mobile floating action button */}
+      <button className="fab" onClick={() => setCreateModalOpen(true)} aria-label="Yeni Üye Ekle">
+        <Plus size={24} />
+      </button>
 
       {errorMsg && <div className="toast-msg error">{errorMsg}</div>}
       {successMsg && <div className="toast-msg success">{successMsg}</div>}
@@ -235,12 +241,14 @@ export default function MembersPage({ currentUser, initialNeighborhood, initialS
       <div className="filter-bar">
         
         {/* Row 1: Search + Neighborhood Dropdown + View Switcher */}
-        <div className="search-and-view" style={{ flexWrap: 'wrap', gap: '10px' }}>
+        <div className="search-and-view">
           {/* Search Box */}
-          <div className="search-container" style={{ flex: '1 1 240px' }}>
+          <div className="search-container">
             <Search size={18} className="search-icon" />
             <input
-              type="text"
+              type="search"
+              inputMode="search"
+              enterKeyHint="search"
               className="form-control search-input"
               placeholder="İsim, telefon veya mahalle ara..."
               value={searchQuery}
@@ -249,13 +257,12 @@ export default function MembersPage({ currentUser, initialNeighborhood, initialS
           </div>
 
           {/* Mahalle Selector */}
-          <div style={{ flex: '1 1 200px', minWidth: '180px' }}>
+          <div className="filter-select-wrap">
             <select
               className="form-control"
               value={selectedNeighborhood}
               onChange={(e) => setSelectedNeighborhood(e.target.value)}
               style={{
-                height: '42px',
                 borderColor: selectedNeighborhood !== 'TUM' ? 'var(--primary)' : 'var(--border-color)',
                 fontWeight: selectedNeighborhood !== 'TUM' ? 600 : 400
               }}
@@ -269,22 +276,24 @@ export default function MembersPage({ currentUser, initialNeighborhood, initialS
             </select>
           </div>
 
-          {/* View Switcher: Kart / Tablo */}
-          <div className="view-switcher" style={{ flexShrink: 0 }}>
-            {['Kart', 'Tablo'].map((mode) => (
-              <button
-                key={mode}
-                className={`view-btn ${viewMode === mode ? 'active' : ''}`}
-                onClick={() => setViewMode(mode)}
-              >
-                {mode}
-              </button>
-            ))}
-          </div>
+          {/* View Switcher: Kart / Tablo (desktop only, mobile is always Kart) */}
+          {!isMobile && (
+            <div className="view-switcher" style={{ flexShrink: 0 }}>
+              {['Kart', 'Tablo'].map((mode) => (
+                <button
+                  key={mode}
+                  className={`view-btn ${viewMode === mode ? 'active' : ''}`}
+                  onClick={() => setViewMode(mode)}
+                >
+                  {mode}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Row 2: Stance Filter Pills */}
-        <div className="tag-filters" style={{ overflowX: 'auto', paddingBottom: '4px' }}>
+        <div className="tag-filters">
           {STANCE_FILTERS.map((filter) => (
             <button
               key={filter.id}
@@ -305,15 +314,15 @@ export default function MembersPage({ currentUser, initialNeighborhood, initialS
         </div>
       ) : (
         <>
-          {viewMode === 'Kart' && (
-            <MemberCardView 
-              members={members} 
-              onSelectMember={setSelectedMember} 
+          {effectiveViewMode === 'Kart' && (
+            <MemberCardView
+              members={members}
+              onSelectMember={setSelectedMember}
               onStanceChange={handleStanceChangeInline}
             />
           )}
 
-          {viewMode === 'Tablo' && (
+          {effectiveViewMode === 'Tablo' && (
             <MemberTable 
               members={members} 
               onSelectMember={setSelectedMember} 
@@ -339,6 +348,7 @@ export default function MembersPage({ currentUser, initialNeighborhood, initialS
       {createModalOpen && (
         <div className="modal-backdrop" onClick={() => setCreateModalOpen(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '540px' }}>
+            <div className="sheet-handle" />
             <div className="modal-header">
               <h3 style={{ fontSize: '18px', fontWeight: 700 }}>Yeni Saha Üyesi Ekle</h3>
               <button className="drawer-close" onClick={() => setCreateModalOpen(false)}>
@@ -347,7 +357,7 @@ export default function MembersPage({ currentUser, initialNeighborhood, initialS
             </div>
             
             <form onSubmit={handleCreateMember}>
-              <div className="modal-body" style={{ maxHeight: 'calc(100vh - 200px)', overflowY: 'auto' }}>
+              <div className="modal-body">
                 
                 {isAdmin && (
                   <div className="form-group">
@@ -364,7 +374,7 @@ export default function MembersPage({ currentUser, initialNeighborhood, initialS
                   </div>
                 )}
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                <div className="grid-2-col">
                   <div className="form-group">
                     <label>Ad <span style={{ color: 'var(--danger)' }}>*</span></label>
                     <input
@@ -389,7 +399,7 @@ export default function MembersPage({ currentUser, initialNeighborhood, initialS
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                <div className="grid-2-col">
                   <div className="form-group">
                     <label>Telefon</label>
                     <input
@@ -425,7 +435,7 @@ export default function MembersPage({ currentUser, initialNeighborhood, initialS
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                <div className="grid-2-col">
                   <div className="form-group">
                     <label>TCKN</label>
                     <input

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import UsersList from './pages/Users';
@@ -27,10 +27,17 @@ export default function App() {
   // Mobile sidebar visibility state (for Admins)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
+  // Scroll container ref: reset scroll on tab change like a native app
+  const mainContentRef = useRef(null);
+
   // Check auth state on mount
   useEffect(() => {
     checkAuthentication();
   }, []);
+
+  useEffect(() => {
+    if (mainContentRef.current) mainContentRef.current.scrollTop = 0;
+  }, [activeTab]);
 
   const checkAuthentication = async () => {
     setLoading(true);
@@ -111,8 +118,8 @@ export default function App() {
       )}
 
       {/* Main Container */}
-      <div className="main-content">
-        <Header 
+      <div className="main-content" ref={mainContentRef}>
+        <Header
           user={currentUser} 
           onLogout={handleLogout} 
           onToggleSidebar={() => setMobileSidebarOpen(!mobileSidebarOpen)} 
@@ -146,8 +153,8 @@ export default function App() {
       </div>
 
       {/* Mobile Bottom Navigation Bar (Rock-solid for phone usage) */}
-      <div className="mobile-bottom-nav">
-        <button 
+      <nav className="mobile-bottom-nav">
+        <button
           className={`mobile-nav-item ${activeTab === 'members' ? 'active' : ''}`}
           onClick={() => {
             setTargetNeighborhood(null);
@@ -155,45 +162,45 @@ export default function App() {
             setActiveTab('members');
           }}
         >
-          <UserCheck size={20} />
+          <span className="mobile-nav-icon"><UserCheck size={20} /></span>
           <span>Üyeler</span>
         </button>
 
-        <button 
+        <button
           className={`mobile-nav-item ${activeTab === 'dashboard' ? 'active' : ''}`}
           onClick={() => setActiveTab('dashboard')}
         >
-          <LayoutDashboard size={20} />
+          <span className="mobile-nav-icon"><LayoutDashboard size={20} /></span>
           <span>Genel Bakış</span>
         </button>
 
         {isAdmin && (
           <>
-            <button 
+            <button
               className={`mobile-nav-item ${activeTab === 'users' ? 'active' : ''}`}
               onClick={() => setActiveTab('users')}
             >
-              <Users size={20} />
+              <span className="mobile-nav-icon"><Users size={20} /></span>
               <span>Sorumlular</span>
             </button>
-            <button 
+            <button
               className={`mobile-nav-item ${activeTab === 'upload' ? 'active' : ''}`}
               onClick={() => setActiveTab('upload')}
             >
-              <FileSpreadsheet size={20} />
+              <span className="mobile-nav-icon"><FileSpreadsheet size={20} /></span>
               <span>Excel</span>
             </button>
           </>
         )}
 
-        <button 
-          className="mobile-nav-item"
+        <button
+          className="mobile-nav-item danger"
           onClick={handleLogout}
         >
-          <LogOut size={20} style={{ color: 'var(--danger)' }} />
-          <span style={{ color: 'var(--danger)' }}>Çıkış</span>
+          <span className="mobile-nav-icon"><LogOut size={20} /></span>
+          <span>Çıkış</span>
         </button>
-      </div>
+      </nav>
 
       {/* Floating progress indicator for active uploads */}
       {activeUploadId && (

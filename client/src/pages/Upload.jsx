@@ -166,7 +166,7 @@ export default function UploadPage({ onUploadStart }) {
       {step === 'upload' ? (
         <div className="upload-split-layout">
           {/* Step 1: Upload form */}
-          <div className="table-container" style={{ padding: '32px' }}>
+          <div className="table-container panel">
             <h3 style={{ fontSize: '16px', marginBottom: '24px', color: 'var(--text-main)' }}>1. Aşama: Dosya ve İlçe Seçimi</h3>
             
             <form onSubmit={handleAnalyzeSubmit}>
@@ -241,7 +241,7 @@ export default function UploadPage({ onUploadStart }) {
           </div>
 
           {/* Upload History */}
-          <div className="table-container" style={{ padding: '24px' }}>
+          <div className="table-container panel">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
               <h3 style={{ fontSize: '16px', color: 'var(--text-main)', margin: 0 }}>Son Yükleme Geçmişi</h3>
               <button className="btn btn-secondary" onClick={fetchHistory} style={{ padding: '6px', borderRadius: 'var(--radius-sm)' }}>
@@ -257,7 +257,7 @@ export default function UploadPage({ onUploadStart }) {
               </div>
             ) : (
               <div style={{ overflowX: 'auto' }}>
-                <table className="custom-table" style={{ width: '100%', fontSize: '12px' }}>
+                <table className="custom-table responsive-table" style={{ width: '100%', fontSize: '12px' }}>
                   <thead>
                     <tr>
                       <th style={{ padding: '8px 12px' }}>Dosya</th>
@@ -269,12 +269,12 @@ export default function UploadPage({ onUploadStart }) {
                   <tbody>
                     {recentUploads.map((log) => (
                       <tr key={log.id}>
-                        <td style={{ padding: '10px 12px', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={log.filename}>
+                        <td className="cell-primary" style={{ padding: '10px 12px', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={log.filename}>
                           {log.filename.replace(/^\d+-/, '')}
                         </td>
-                        <td style={{ padding: '10px 12px' }}>{log.district}</td>
-                        <td style={{ padding: '10px 12px', fontWeight: 600 }}>{getStatusBadge(log.status)}</td>
-                        <td style={{ padding: '10px 12px', color: 'var(--text-muted)', fontSize: '11px' }}>{log.error || 'İşlem bekliyor'}</td>
+                        <td data-label="İlçe" style={{ padding: '10px 12px' }}>{log.district}</td>
+                        <td data-label="Durum" style={{ padding: '10px 12px', fontWeight: 600 }}>{getStatusBadge(log.status)}</td>
+                        <td className="cell-full" data-label="Açıklama" style={{ padding: '10px 12px', color: 'var(--text-muted)', fontSize: '11px' }}>{log.error || 'İşlem bekliyor'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -286,8 +286,8 @@ export default function UploadPage({ onUploadStart }) {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           {/* Step 2: Field Mapping View */}
-          <div className="table-container" style={{ padding: '32px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+          <div className="table-container panel">
+            <div className="section-head" style={{ marginBottom: '24px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <button className="btn btn-secondary" onClick={() => setStep('upload')} style={{ padding: '8px' }}>
                   <ArrowLeft size={16} />
@@ -479,7 +479,7 @@ export default function UploadPage({ onUploadStart }) {
             </div>
 
             {/* Form actions */}
-            <div style={{ display: 'flex', gap: '16px', justifyContent: 'flex-end', marginTop: '32px' }}>
+            <div className="form-actions" style={{ justifyContent: 'flex-end', marginTop: '32px' }}>
               <button className="btn btn-secondary" onClick={() => setStep('upload')} style={{ padding: '12px 24px' }}>
                 Vazgeç
               </button>

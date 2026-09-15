@@ -108,7 +108,7 @@ export default function Dashboard({ currentUser, onNavigateToMembers }) {
         <div className="page-actions">
           <button className="btn btn-secondary" onClick={fetchStats} disabled={loading}>
             <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
-            <span>Yenile</span>
+            <span className="btn-label">Yenile</span>
           </button>
         </div>
       </div>
@@ -162,8 +162,8 @@ export default function Dashboard({ currentUser, onNavigateToMembers }) {
       </div>
 
       {/* Voter Stance Breakdown Bar & Cards */}
-      <div className="table-container" style={{ padding: '24px', marginBottom: '24px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+      <div className="table-container panel" style={{ marginBottom: '24px' }}>
+        <div className="section-head">
           <div>
             <h3 style={{ fontSize: '16px', fontWeight: 700, margin: 0 }}>Seçmen İntibası ve Eğilim Dağılımı</h3>
             <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: '4px 0 0' }}>
@@ -197,7 +197,7 @@ export default function Dashboard({ currentUser, onNavigateToMembers }) {
         </div>
 
         {/* 4 Stance Quick Filter Cards */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+        <div className="stance-summary-grid">
           
           <div 
             style={{ 
@@ -282,8 +282,8 @@ export default function Dashboard({ currentUser, onNavigateToMembers }) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
         
         {/* Table 1: Mahallelere Göre Dağılım */}
-        <div className="table-container" style={{ padding: '24px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+        <div className="table-container panel">
+          <div className="section-head">
             <div>
               <h3 style={{ fontSize: '16px', fontWeight: 700, margin: 0 }}>
                 {stats?.isNeighborhoodScoped ? `${stats.neighborhood} Mahallesi Saha Dağılımı` : 'Mahallelere Göre Saha Dağılımı'}
@@ -300,7 +300,7 @@ export default function Dashboard({ currentUser, onNavigateToMembers }) {
           </div>
 
           <div style={{ overflowX: 'auto' }}>
-            <table className="custom-table" style={{ width: '100%', minWidth: '700px' }}>
+            <table className="custom-table responsive-table rt-3 table-wide">
               <thead>
                 <tr>
                   <th>Mahalle Adı</th>
@@ -328,17 +328,17 @@ export default function Dashboard({ currentUser, onNavigateToMembers }) {
 
                     return (
                       <tr key={row.neighborhood}>
-                        <td style={{ fontWeight: 600 }}>
+                        <td className="cell-primary" style={{ fontWeight: 600 }}>
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
                             <MapPin size={13} style={{ color: 'var(--primary)' }} />
                             {row.neighborhood}
                           </span>
                         </td>
-                        <td style={{ textAlign: 'right', fontWeight: 600 }}>{row.total_members}</td>
-                        <td style={{ textAlign: 'right', fontWeight: 600, color: 'var(--success)' }}>
+                        <td data-label="Toplam Üye" style={{ textAlign: 'right', fontWeight: 600 }}>{row.total_members}</td>
+                        <td data-label="Görüşülen" style={{ textAlign: 'right', fontWeight: 600, color: 'var(--success)' }}>
                           {row.contacted_count}
                         </td>
-                        <td style={{ textAlign: 'right' }}>
+                        <td data-label="Oran" style={{ textAlign: 'right' }}>
                           <span style={{ 
                             fontSize: '12px', 
                             fontWeight: 700, 
@@ -347,16 +347,16 @@ export default function Dashboard({ currentUser, onNavigateToMembers }) {
                             %{rate}
                           </span>
                         </td>
-                        <td style={{ textAlign: 'right', color: '#10b981', fontWeight: 600 }}>
+                        <td data-label="🟢 Destek" style={{ textAlign: 'right', color: '#10b981', fontWeight: 600 }}>
                           {row.destekliyor_count || 0}
                         </td>
-                        <td style={{ textAlign: 'right', color: '#f59e0b', fontWeight: 600 }}>
+                        <td data-label="🟡 Kararsız" style={{ textAlign: 'right', color: '#f59e0b', fontWeight: 600 }}>
                           {row.kararsiz_count || 0}
                         </td>
-                        <td style={{ textAlign: 'right', color: '#ef4444', fontWeight: 600 }}>
+                        <td data-label="🔴 Mesafeli" style={{ textAlign: 'right', color: '#ef4444', fontWeight: 600 }}>
                           {row.mesafeli_count || 0}
                         </td>
-                        <td style={{ textAlign: 'right' }}>
+                        <td className="cell-actions" style={{ textAlign: 'right' }}>
                           {onNavigateToMembers && (
                             <button
                               className="btn btn-secondary"
@@ -377,8 +377,8 @@ export default function Dashboard({ currentUser, onNavigateToMembers }) {
         </div>
 
         {/* Table 2: Mahalle Sorumluları Saha Performansı */}
-        <div className="table-container" style={{ padding: '24px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+        <div className="table-container panel">
+          <div className="section-head">
             <div>
               <h3 style={{ fontSize: '16px', fontWeight: 700, margin: 0 }}>
                 {isAdmin ? 'Mahalle Sorumluları Görüşme Performansı (Tüm Mahalleler)' : 'Kişisel Saha İletişim Performansınız'}
@@ -395,7 +395,7 @@ export default function Dashboard({ currentUser, onNavigateToMembers }) {
           </div>
 
           <div style={{ overflowX: 'auto' }}>
-            <table className="custom-table" style={{ width: '100%', minWidth: '700px' }}>
+            <table className="custom-table responsive-table rt-3 table-wide">
               <thead>
                 <tr>
                   <th>Sorumlu Adı</th>
@@ -416,7 +416,7 @@ export default function Dashboard({ currentUser, onNavigateToMembers }) {
                 ) : (
                   stats.representativeStats.map((rep) => (
                     <tr key={rep.user_id}>
-                      <td style={{ fontWeight: 600 }}>
+                      <td className="cell-primary" style={{ fontWeight: 600 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <div style={{ 
                             width: '28px', 
@@ -435,8 +435,8 @@ export default function Dashboard({ currentUser, onNavigateToMembers }) {
                           <span>{rep.user_name}</span>
                         </div>
                       </td>
-                      <td style={{ color: 'var(--text-muted)', fontSize: '13px' }}>{rep.user_email}</td>
-                      <td>
+                      <td className="cell-full" data-label="E-posta" style={{ color: 'var(--text-muted)', fontSize: '13px' }}>{rep.user_email}</td>
+                      <td className="cell-full" data-label="Mahalle">
                         {rep.user_neighborhood ? (
                           <span className="neighborhood-badge">
                             <MapPin size={11} />
@@ -448,13 +448,13 @@ export default function Dashboard({ currentUser, onNavigateToMembers }) {
                           </span>
                         )}
                       </td>
-                      <td style={{ textAlign: 'right', fontWeight: 700, fontSize: '15px', color: 'var(--primary)' }}>
+                      <td data-label="Görüşme" style={{ textAlign: 'right', fontWeight: 700, fontSize: '15px', color: 'var(--primary)' }}>
                         {rep.total_interactions || 0}
                       </td>
-                      <td style={{ textAlign: 'right', fontWeight: 600, color: 'var(--success)' }}>
+                      <td data-label="Farklı Üye" style={{ textAlign: 'right', fontWeight: 600, color: 'var(--success)' }}>
                         {rep.unique_members_contacted || 0}
                       </td>
-                      <td style={{ textAlign: 'right', fontSize: '13px', color: 'var(--text-muted)' }}>
+                      <td data-label="Son Faaliyet" style={{ textAlign: 'right', fontSize: '13px', color: 'var(--text-muted)' }}>
                         {rep.last_active_date ? new Date(rep.last_active_date).toLocaleDateString('tr-TR') : '—'}
                       </td>
                     </tr>
