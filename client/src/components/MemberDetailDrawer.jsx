@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, ArrowLeft, Save, Plus, Phone, Calendar, User, Info, FileText, CheckCircle2, Trash2, PhoneCall, MapPin, MessageSquare } from 'lucide-react';
+import { X, ArrowLeft, Save, Plus, Phone, Calendar, User, FileText, CheckCircle2, Trash2, PhoneCall, MapPin, MessageSquare, Check } from 'lucide-react';
 import { api } from '../utils/api';
 import { formatPhone } from './MemberTable';
 
@@ -8,6 +8,7 @@ export function getStanceLabel(stance) {
     case 'DESTEKLIYOR': return 'Destekliyor';
     case 'KARARSIZ': return 'Kararsız';
     case 'MESAFELI': return 'Mesafeli';
+    case 'GELMEYECEK': return 'Oy Vermeye Gelmeyecek';
     default: return 'Henüz Görüşülmedi';
   }
 }
@@ -16,15 +17,15 @@ export default function MemberDetailDrawer({ member, onClose, onUpdateSuccess })
   const [activeSubTab, setActiveSubTab] = useState('timeline'); // 'timeline' or 'edit'
   
   // Member edit form state
-  const [tckn, setTckn] = useState('');
+  const [sno, setSno] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [phone, setPhone] = useState('');
   const [neighborhood, setNeighborhood] = useState('');
-  const [school, setSchool] = useState('');
-  const [ballotNo, setBallotNo] = useState('');
   const [voteStance, setVoteStance] = useState('BELIRTILMEDI');
   const [contactStatus, setContactStatus] = useState('GORUSULMEDI');
+  const [hasVoted, setHasVoted] = useState(0);
+  const [votedAt, setVotedAt] = useState(null);
   
   // Timeline events state
   const [timelineEvents, setTimelineEvents] = useState([]);
@@ -37,6 +38,7 @@ export default function MemberDetailDrawer({ member, onClose, onUpdateSuccess })
   const [eventNote, setEventNote] = useState('');
   const [submittingEvent, setSubmittingEvent] = useState(false);
   const [submittingMember, setSubmittingMember] = useState(false);
+  const [togglingVote, setTogglingVote] = useState(false);
   
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -44,15 +46,15 @@ export default function MemberDetailDrawer({ member, onClose, onUpdateSuccess })
   // Reset states when member changes
   useEffect(() => {
     if (member) {
-      setTckn(member.tckn || '');
+      setSno(member.sno || '');
       setFirstName(member.first_name || '');
       setLastName(member.last_name || '');
       setPhone(member.phone || '');
       setNeighborhood(member.neighborhood || '');
-      setSchool(member.school || '');
-      setBallotNo(member.ballot_no || '');
       setVoteStance(member.vote_stance || 'BELIRTILMEDI');
       setContactStatus(member.contact_status || 'GORUSULMEDI');
+      setHasVoted(member.has_voted || 0);
+      setVotedAt(member.voted_at || null);
       setEventStance(member.vote_stance || 'BELIRTILMEDI');
       setErrorMsg('');
       setSuccessMsg('');
@@ -75,6 +77,24 @@ export default function MemberDetailDrawer({ member, onClose, onUpdateSuccess })
     }
   };
 
+  const handleToggleVoteDirect = async () => {
+    if (!member || togglingVote) return;
+    setTogglingVote(true);
+    setErrorMsg('');
+    try {
+      const res = await api.members.toggleVote(member.id);
+      setHasVoted(res.member.has_voted);
+      setVotedAt(res.member.voted_at);
+      setSuccessMsg(res.message);
+      if (onUpdateSuccess) onUpdateSuccess();
+      fetchTimeline();
+    } catch (err) {
+      setErrorMsg(err.message || 'Oy durumu güncellenemedi.');
+    } finally {
+      setTogglingVote(false);
+    }
+  };
+
   const handleUpdateMember = async (e) => {
     e.preventDefault();
     if (!firstName || !lastName) {
@@ -86,15 +106,14 @@ export default function MemberDetailDrawer({ member, onClose, onUpdateSuccess })
     setSuccessMsg('');
     try {
       await api.members.update(member.id, {
-        tckn,
+        sno: sno ? parseInt(sno, 10) : null,
         first_name: firstName,
         last_name: lastName,
         phone,
         neighborhood,
-        school,
-        ballot_no: ballotNo,
         vote_stance: voteStance,
-        contact_status: contactStatus
+        contact_status: contactStatus,
+        has_voted: hasVoted
       });
       setSuccessMsg('Üye bilgileri başarıyla güncellendi.');
       onUpdateSuccess();
@@ -107,7 +126,7 @@ export default function MemberDetailDrawer({ member, onClose, onUpdateSuccess })
   };
 
   const handleDeleteMember = async () => {
-    if (!window.confirm(`${firstName} ${lastName} isimli üyeyi sistemden tamamen silmek istediğinize emin misiniz?`)) {
+    if (!window.confirm(`${firstName} ${lastName} isimli üyeyi sistemden silmek istediğinize emin misiniz?`)) {
       return;
     }
     setSubmittingMember(true);
@@ -134,7 +153,6 @@ export default function MemberDetailDrawer({ member, onClose, onUpdateSuccess })
     setErrorMsg('');
     setSuccessMsg('');
     try {
-      // Update member stance and add timeline note
       await api.members.update(member.id, {
         vote_stance: eventStance,
         contact_status: 'GORUSULDU',
@@ -161,6 +179,7 @@ export default function MemberDetailDrawer({ member, onClose, onUpdateSuccess })
       case 'SMS': return <FileText size={13} />;
       case 'YUZ_YUZE': case 'ZIYARET': return <User size={13} />;
       case 'DURUM_DEGISIKLIGI': return <CheckCircle2 size={13} />;
+      case 'SECIM_OYU': return <Check size={13} />;
       default: return <MessageSquare size={13} />;
     }
   };
@@ -172,7 +191,7 @@ export default function MemberDetailDrawer({ member, onClose, onUpdateSuccess })
       case 'YUZ_YUZE': return 'Yüz Yüze Görüşme';
       case 'ZIYARET': return 'Ev / İşyeri Ziyareti';
       case 'DURUM_DEGISIKLIGI': return 'İntiba Değişimi';
-      case 'GOREV_DEGISIKLIGI': return 'Görev Değişimi';
+      case 'SECIM_OYU': return 'Seçim Günü Oy Takibi';
       case 'SISTEM': case 'SYSTEM': return 'Sistem Kaydı';
       default: return 'Görüşme Notu';
     }
@@ -192,7 +211,10 @@ export default function MemberDetailDrawer({ member, onClose, onUpdateSuccess })
             <ArrowLeft size={20} />
           </button>
           <div className="drawer-title-area">
-            <div className="drawer-title">{firstName} {lastName}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {sno && <span className="sno-badge">#{sno}</span>}
+              <div className="drawer-title">{firstName} {lastName}</div>
+            </div>
             <div style={{ fontSize: '13px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginTop: '4px' }}>
               {neighborhood && (
                 <span className="neighborhood-badge">
@@ -223,6 +245,48 @@ export default function MemberDetailDrawer({ member, onClose, onUpdateSuccess })
           </div>
         )}
 
+        {/* Election Day Fast Toggle Bar */}
+        <div style={{
+          margin: '0 20px 14px 20px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          backgroundColor: hasVoted === 1 ? 'rgba(16, 185, 129, 0.12)' : 'rgba(255, 255, 255, 0.03)',
+          border: hasVoted === 1 ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid var(--border-color)',
+          borderRadius: 'var(--radius-md)',
+          padding: '12px 14px'
+        }}>
+          <div>
+            <div style={{ fontSize: '13px', fontWeight: 700, color: hasVoted === 1 ? '#34d399' : 'var(--text-main)' }}>
+              🗳️ Seçim Günü Sandık Takibi
+            </div>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+              {hasVoted === 1 
+                ? (votedAt ? `Oy kullandı (${new Date(votedAt).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })})` : 'Sandıkta oy kullandı')
+                : 'Henüz oy kullanmadı'}
+            </div>
+          </div>
+          <button
+            type="button"
+            className={`voted-toggle-btn ${hasVoted === 1 ? 'voted' : 'not-voted'}`}
+            onClick={handleToggleVoteDirect}
+            disabled={togglingVote}
+            title={hasVoted === 1 ? 'Oyu geri al' : 'Oy kullandı olarak işaretle'}
+          >
+            {hasVoted === 1 ? (
+              <>
+                <CheckCircle2 size={14} />
+                <span>Oy Kullandı</span>
+              </>
+            ) : (
+              <>
+                <span style={{ fontSize: '13px' }}>⏳</span>
+                <span>Oy Kullanmadı</span>
+              </>
+            )}
+          </button>
+        </div>
+
         {/* Tab Swapping inside Drawer */}
         <div className="drawer-tabs">
           <button
@@ -248,8 +312,32 @@ export default function MemberDetailDrawer({ member, onClose, onUpdateSuccess })
           {activeSubTab === 'edit' ? (
             /* Member Edit Form */
             <form onSubmit={handleUpdateMember}>
-              <h4 className="drawer-section-title">Profil Bilgileri</h4>
+              <h4 className="drawer-section-title">Üye Bilgileri</h4>
               
+              <div className="grid-2-col">
+                <div className="form-group">
+                  <label>Sıra No (SNo)</label>
+                  <input
+                    type="number"
+                    className="form-control"
+                    value={sno}
+                    onChange={(e) => setSno(e.target.value)}
+                    placeholder="Örn: 27"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Mahalle</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    value={neighborhood}
+                    onChange={(e) => setNeighborhood(e.target.value)}
+                    placeholder="Örn: DEĞİRMENDERE MERKEZ MAH."
+                    required
+                  />
+                </div>
+              </div>
+
               <div className="grid-2-col">
                 <div className="form-group">
                   <label>Ad</label>
@@ -273,27 +361,15 @@ export default function MemberDetailDrawer({ member, onClose, onUpdateSuccess })
                 </div>
               </div>
 
-              <div className="grid-2-col">
-                <div className="form-group">
-                  <label>Telefon</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="05XX XXX XX XX"
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Mahalle</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    value={neighborhood}
-                    onChange={(e) => setNeighborhood(e.target.value)}
-                    placeholder="Örn: ATATÜRK MAH."
-                  />
-                </div>
+              <div className="form-group">
+                <label>Telefon</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="05XX XXX XX XX"
+                />
               </div>
 
               <div className="grid-2-col">
@@ -307,6 +383,7 @@ export default function MemberDetailDrawer({ member, onClose, onUpdateSuccess })
                     <option value="DESTEKLIYOR">🟢 Destekliyor</option>
                     <option value="KARARSIZ">🟡 Kararsız</option>
                     <option value="MESAFELI">🔴 Mesafeli</option>
+                    <option value="GELMEYECEK">🟣 Oy Vermeye Gelmeyecek</option>
                     <option value="BELIRTILMEDI">⚪ Henüz Görüşülmedi</option>
                   </select>
                 </div>
@@ -319,44 +396,20 @@ export default function MemberDetailDrawer({ member, onClose, onUpdateSuccess })
                   >
                     <option value="GORUSULDU">Görüşüldü</option>
                     <option value="GORUSULMEDI">Görüşülmedi</option>
-                    <option value="ULASILAMADI">Ulaşılamadı</option>
                   </select>
                 </div>
               </div>
 
-              <div className="grid-2-col">
-                <div className="form-group">
-                  <label>Sandık Alanı / Okul</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    value={school}
-                    onChange={(e) => setSchool(e.target.value)}
-                    placeholder="Örn: Barbaros Hayrettin Lisesi"
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Sandık No</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    value={ballotNo}
-                    onChange={(e) => setBallotNo(e.target.value)}
-                    placeholder="Örn: 1045"
-                  />
-                </div>
-              </div>
-
               <div className="form-group">
-                <label>TC Kimlik Numarası (TCKN)</label>
-                <input
-                  type="text"
+                <label>Seçim Günü Oy Durumu</label>
+                <select
                   className="form-control"
-                  value={tckn}
-                  onChange={(e) => setTckn(e.target.value)}
-                  maxLength={11}
-                  placeholder="11 haneli TCKN"
-                />
+                  value={hasVoted}
+                  onChange={(e) => setHasVoted(parseInt(e.target.value, 10))}
+                >
+                  <option value={0}>⏳ Oy Kullanmadı</option>
+                  <option value={1}>✅ Oy Kullandı</option>
+                </select>
               </div>
 
               <div className="form-actions" style={{ marginTop: '20px' }}>
@@ -436,6 +489,7 @@ export default function MemberDetailDrawer({ member, onClose, onUpdateSuccess })
                     <option value="DESTEKLIYOR">🟢 Destekliyor</option>
                     <option value="KARARSIZ">🟡 Kararsız</option>
                     <option value="MESAFELI">🔴 Mesafeli</option>
+                    <option value="GELMEYECEK">🟣 Oy Vermeye Gelmeyecek</option>
                     <option value="BELIRTILMEDI">⚪ Henüz Görüşülmedi / Bilinmiyor</option>
                   </select>
                 </div>
@@ -447,7 +501,7 @@ export default function MemberDetailDrawer({ member, onClose, onUpdateSuccess })
                     rows={3}
                     value={eventNote}
                     onChange={(e) => setEventNote(e.target.value)}
-                    placeholder="Görüşmede neler konuşuldu? Üyenin beklentisi veya yaklaşımı nedir?"
+                    placeholder="Görüşmede neler konuşuldu? Üyenin yaklaşımı nedir?"
                     style={{ resize: 'vertical' }}
                     required
                   />

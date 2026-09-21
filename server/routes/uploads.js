@@ -4,7 +4,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const XLSX = require('xlsx');
-const { getDb } = require('../db');
+const { getDb, GOLCUK_NEIGHBORHOODS } = require('../db');
 const { requireAdmin } = require('../auth');
 const { logAction } = require('../logger');
 
@@ -26,23 +26,21 @@ function normalizeText(text) {
 
 function buildSearchIndex(member) {
   const parts = [
+    member.sno,
     member.first_name,
     member.last_name,
     member.phone,
-    member.tckn,
-    member.school,
-    member.ballot_no,
-    member.district,
-    member.neighborhood
+    member.neighborhood,
+    member.district
   ];
-  return parts.map(normalizeText).join(' ');
+  return parts.filter(Boolean).map(normalizeText).join(' ');
 }
 
 function parseExcelWorksheet(worksheet) {
   const rawRows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
   if (!rawRows || rawRows.length === 0) return { headers: [], dataRows: [], headerRowIndex: 0 };
 
-  const keywords = ['ad', 'adi', 'soyad', 'soyadi', 'telefon', 'mahalle', 'tckn', 'tcno', 'sandik'];
+  const keywords = ['sno', 'ad', 'adi', 'soyad', 'soyadi', 'telefon', 'mahalle'];
   let headerRowIndex = 0;
   for (let i = 0; i < Math.min(rawRows.length, 15); i++) {
     const row = rawRows[i];
@@ -121,7 +119,6 @@ router.get('/status', requireAdmin, async (req, res) => {
       }
       return res.json(uploadRecord);
     } else {
-      // Return 10 most recent uploads
       const uploads = await db.all('SELECT * FROM uploads ORDER BY created_at DESC LIMIT 10');
       return res.json(uploads);
     }
@@ -152,16 +149,11 @@ router.post('/analyze', requireAdmin, upload.single('excel'), async (req, res) =
     }
 
     const guessedMapping = {
-      tckn: '',
+      sno: '',
       first_name: '',
       last_name: '',
       phone: '',
-      neighborhood: '',
-      ballot_area: '',
-      ballot_no: '',
-      role: '',
-      district_name: '',
-      description: ''
+      neighborhood: ''
     };
 
     const normalize = (str) => {
@@ -177,16 +169,11 @@ router.post('/analyze', requireAdmin, upload.single('excel'), async (req, res) =
     };
 
     const ruleMaps = {
-      tckn: ['tckn', 'tcno', 'tckimlikno', 'tckimlik', 'kimlikno', 'tc', 'tckimliknumarasi'],
+      sno: ['sno', 'sirano', 'sira', 'sn', 'no'],
       first_name: ['adi', 'ad', 'isim', 'firstname', 'adiniz'],
       last_name: ['soyadi', 'soyad', 'soyisim', 'lastname', 'soyadiniz'],
-      phone: ['ceptelefon', 'telefon', 'tel', 'phone', 'gsm', 'cep', 'mobil', 'telefonno'],
-      neighborhood: ['mahalle', 'mah', 'mahallesi', 'koy', 'semt', 'neighborhood', 'adres'],
-      ballot_area: ['sandikalani', 'okul', 'yer', 'adresalani', 'okuladi', 'okulu', 'sandikyeri'],
-      ballot_no: ['sandikno', 'sandik', 'sandiknumarasi', 'no'],
-      role: ['durum', 'durumu', 'rol', 'rolu', 'gorev', 'gorevi', 'role', 'duty', 'position', 'unvan', 'sifat'],
-      district_name: ['ilceadi', 'ilce', 'ilcedurumu', 'ilce_adi', 'district', 'town'],
-      description: ['aciklama', 'not', 'detay', 'description', 'notlar', 'aciklamalar']
+      phone: ['telefon', 'ceptelefon', 'tel', 'phone', 'gsm', 'cep', 'mobil', 'telefonno'],
+      neighborhood: ['mahalle', 'mah', 'mahallesi', 'koy', 'semt', 'adres']
     };
 
     headers.forEach(header => {
@@ -201,7 +188,7 @@ router.post('/analyze', requireAdmin, upload.single('excel'), async (req, res) =
       });
     });
 
-    const previewRows = dataRows.slice(0, 3);
+    const previewRows = dataRows.slice(0, 5);
 
     res.json({
       tempFileId: fileName,
@@ -218,10 +205,10 @@ router.post('/analyze', requireAdmin, upload.single('excel'), async (req, res) =
 
 // POST /api/uploads/import (Start actual import with user mappings, Admin only)
 router.post('/import', requireAdmin, async (req, res) => {
-  const { tempFileId, district, mapping } = req.body;
+  const { tempFileId, district = 'Gölcük', mapping } = req.body;
 
-  if (!tempFileId || !district || !mapping) {
-    return res.status(400).json({ message: 'Dosya, ilçe ve sütun eşleştirmesi zorunludur.' });
+  if (!tempFileId || !mapping) {
+    return res.status(400).json({ message: 'Dosya ve sütun eşleştirmesi zorunludur.' });
   }
 
   const uploadPath = path.join(__dirname, '../uploads');
@@ -243,10 +230,7 @@ router.post('/import', requireAdmin, async (req, res) => {
 
     processExcelInBackground(uploadId, filePath, district, req.user.id, mapping);
 
-    const logDetails = district === 'ALL_DISTRICTS'
-      ? 'Tüm ilçeler için toplu üye aktarımı başlatıldı (Sütun Eşleştirmeli).'
-      : `${district} ilçesi için toplu üye aktarımı başlatıldı (Sütun Eşleştirmeli).`;
-    await logAction(req, 'EXCEL_UPLOAD', logDetails);
+    await logAction(req, 'EXCEL_UPLOAD', `${district} ilçesi için üye listesi aktarımı başlatıldı.`);
 
     res.json({
       message: 'Aktarım işlemi başlatıldı. Durumu takip edebilirsiniz.',
@@ -259,85 +243,19 @@ router.post('/import', requireAdmin, async (req, res) => {
   }
 });
 
-// POST /api/uploads (Upload Excel and parse async, Admin only - Legacy fallback)
-router.post('/', requireAdmin, upload.single('excel'), async (req, res) => {
-  const { district } = req.body;
-
-  if (!req.file) {
-    return res.status(400).json({ message: 'Lütfen bir Excel dosyası yükleyin.' });
-  }
-
-  if (!district) {
-    fs.unlinkSync(req.file.path);
-    return res.status(400).json({ message: 'Lütfen yüklenecek ilçeyi seçin.' });
-  }
-
-  const uploadId = 'upload-' + Math.random().toString(36).substr(2, 9);
-  const filePath = req.file.path;
-  const fileName = req.file.filename;
-
-  try {
-    const db = await getDb();
-    
-    await db.run(
-      'INSERT INTO uploads (id, district, filename, status) VALUES (?, ?, ?, ?)',
-      [uploadId, district, fileName, 'PENDING']
-    );
-
-    // Call worker without custom mapping (it will use fallback headers)
-    processExcelInBackground(uploadId, filePath, district, req.user.id, null);
-
-    await logAction(req, 'EXCEL_UPLOAD', `${district} ilçesi için toplu üye aktarımı başlatıldı.`);
-
-    res.json({
-      message: 'Excel dosyası başarıyla yüklendi. Arka planda işleme başlandı.',
-      uploadId,
-      status: 'PENDING'
-    });
-  } catch (error) {
-    console.error('Upload route error:', error);
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-    res.status(500).json({ message: 'Yükleme başlatılamadı.' });
-  }
-});
-
-const DISTRICTS = [
-  'Başiskele', 'Çayırova', 'Darıca', 'Derince', 'Dilovası', 
-  'Gebze', 'Gölcük', 'İzmit', 'Kandıra', 'Karamürsel', 'Kartepe', 'Körfez'
-];
-
-function resolveDistrictName(val) {
-  if (!val) return null;
-  const normalized = val.toString().trim().toUpperCase()
+// Match raw neighborhood against the 48 official Golcuk neighborhoods
+function resolveGolcukNeighborhood(raw) {
+  if (!raw) return 'MERKEZ MAH.';
+  const trimmed = raw.toString().trim().toUpperCase()
     .replace(/İ/g, 'I')
-    .replace(/ı/g, 'I')
-    .replace(/Ğ/g, 'G')
-    .replace(/ğ/g, 'G')
-    .replace(/Ü/g, 'U')
-    .replace(/ü/g, 'U')
-    .replace(/Ş/g, 'S')
-    .replace(/ş/g, 'S')
-    .replace(/Ö/g, 'O')
-    .replace(/ö/g, 'O')
-    .replace(/Ç/g, 'C')
-    .replace(/ç/g, 'C');
+    .replace(/İ/g, 'I');
 
-  return DISTRICTS.find(d => {
-    const dNorm = d.toUpperCase()
-      .replace(/İ/g, 'I')
-      .replace(/ı/g, 'I')
-      .replace(/Ğ/g, 'G')
-      .replace(/ğ/g, 'G')
-      .replace(/Ü/g, 'U')
-      .replace(/ü/g, 'U')
-      .replace(/Ş/g, 'S')
-      .replace(/ş/g, 'S')
-      .replace(/Ö/g, 'O')
-      .replace(/ö/g, 'O')
-      .replace(/Ç/g, 'C')
-      .replace(/ç/g, 'C');
-    return normalized === dNorm || normalized.includes(dNorm);
-  }) || null;
+  const match = GOLCUK_NEIGHBORHOODS.find(n => {
+    const nNorm = n.toUpperCase().replace(/İ/g, 'I').replace(/İ/g, 'I');
+    return nNorm === trimmed || trimmed.includes(nNorm) || nNorm.includes(trimmed);
+  });
+
+  return match || 'MERKEZ MAH.';
 }
 
 // Background Worker
@@ -352,121 +270,50 @@ async function processExcelInBackground(uploadId, filePath, district, userId, ma
     const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
     
-    const { headers: detectedHeaders, dataRows: rows } = parseExcelWorksheet(worksheet);
+    const { dataRows: rows } = parseExcelWorksheet(worksheet);
 
     let successCount = 0;
     let errorCount = 0;
 
     const today = new Date().toISOString().split('T')[0];
+    const targetDistrict = district || 'Gölcük';
 
     const map = mapping || {
-      tckn: 'TCKN',
-      first_name: 'Adi',
-      last_name: 'Soyadi',
-      phone: 'CepTelefon',
-      neighborhood: 'Mahalle',
-      ballot_area: 'SandikAlani',
-      ballot_no: 'SandikNo',
-      role: 'Durumu',
-      district_name: 'İlceAdi',
-      description: 'Aciklama'
+      sno: 'SNo',
+      first_name: 'Adı',
+      last_name: 'Soyadı',
+      phone: 'Telefon',
+      neighborhood: 'Mahalle'
     };
 
     await db.run('BEGIN TRANSACTION');
 
     for (const row of rows) {
-      const getValueByMapKey = (row, key, defaultFieldName) => {
-        if (map && map[key]) {
-          return String(row[map[key]] || '').trim();
+      const getValue = (key, fallbackKeys = []) => {
+        if (map && map[key] && row[map[key]] !== undefined) {
+          return String(row[map[key]]).trim();
         }
-        if (defaultFieldName === 'first_name') {
-          return String(row['Adi'] || row['AD'] || row['Ad'] || row['Adı'] || '').trim();
-        }
-        if (defaultFieldName === 'last_name') {
-          return String(row['Soyadi'] || row['SOYADI'] || row['Soyad'] || row['Soyadı'] || '').trim();
-        }
-        if (defaultFieldName === 'phone') {
-          return String(row['CepTelefon'] || row['Telefon'] || row['TELEFON'] || '').trim();
-        }
-        if (defaultFieldName === 'neighborhood') {
-          return String(row['Mahalle'] || row['MAHALLE'] || row['Mah'] || row['Köy'] || '').trim();
-        }
-        if (defaultFieldName === 'ballot_area') {
-          return String(row['SandikAlani'] || row['Okul'] || row['YER'] || '').trim();
-        }
-        if (defaultFieldName === 'ballot_no') {
-          return String(row['SandikNo'] || '').trim();
-        }
-        if (defaultFieldName === 'role') {
-          return String(row['Durumu'] || row['Durum'] || row['Rol'] || row['Gorev'] || '').trim();
-        }
-        if (defaultFieldName === 'district_name') {
-          return String(row['İlceAdi'] || row['İlçe'] || row['Ilce'] || row['IlceAdi'] || '').trim();
-        }
-        if (defaultFieldName === 'description') {
-          return String(row['Aciklama'] || row['Not'] || '').trim();
-        }
-        if (defaultFieldName === 'tckn') {
-          return String(row['TCKN'] || '').trim();
+        for (const fk of fallbackKeys) {
+          if (row[fk] !== undefined) return String(row[fk]).trim();
         }
         return '';
       };
 
-      const tckn = getValueByMapKey(row, 'tckn', 'tckn');
-      const firstName = getValueByMapKey(row, 'first_name', 'first_name').toUpperCase();
-      const lastName = getValueByMapKey(row, 'last_name', 'last_name').toUpperCase();
-      let phone = getValueByMapKey(row, 'phone', 'phone');
-      const neighborhood = getValueByMapKey(row, 'neighborhood', 'neighborhood').toUpperCase();
-      const province = 'KOCAELİ';
-      const school = getValueByMapKey(row, 'ballot_area', 'ballot_area');
-      const ballotNo = getValueByMapKey(row, 'ballot_no', 'ballot_no');
-      const rawRole = getValueByMapKey(row, 'role', 'role');
-      const aciklama = getValueByMapKey(row, 'description', 'description');
+      const rawSno = getValue('sno', ['SNo', 'S.No', 'Sira', 'No']);
+      const parsedSno = rawSno ? parseInt(rawSno, 10) : null;
+      const firstName = getValue('first_name', ['Adı', 'Adi', 'AD', 'Ad']).toUpperCase();
+      const lastName = getValue('last_name', ['Soyadı', 'Soyadi', 'SOYADI', 'Soyad']).toUpperCase();
+      const rawPhone = getValue('phone', ['Telefon', 'TELEFON', 'CepTelefon', 'Tel']);
+      const rawNeighborhood = getValue('neighborhood', ['Mahalle', 'MAHALLE', 'Mah']);
 
       if (!firstName || !lastName) {
         continue;
       }
 
-      // Dynamic District Resolution
-      let targetDistrict = district;
-      if (district === 'ALL_DISTRICTS') {
-        const rowDistrictStr = getValueByMapKey(row, 'district_name', 'district_name');
-        targetDistrict = resolveDistrictName(rowDistrictStr);
-        if (!targetDistrict) {
-          continue; // Skip if district is invalid or outside Kocaeli
-        }
-      }
+      const neighborhood = resolveGolcukNeighborhood(rawNeighborhood);
 
-      // Role parsing & normalization
-      const normalizeRole = (val) => {
-        if (!val) return 'GOREVSIZ';
-        const s = val.toString().trim().toLowerCase()
-          .replace(/ı/g, 'i')
-          .replace(/ğ/g, 'g')
-          .replace(/ü/g, 'u')
-          .replace(/ş/g, 's')
-          .replace(/ö/g, 'o')
-          .replace(/ç/g, 'c')
-          .replace(/[^a-z0-9]/g, '');
-
-        if (s.includes('asiluye') || s === 'asil' || s.includes('asilgorevli')) return 'ASIL_UYE';
-        if (s.includes('yedekuye') || s === 'yedek' || (s.includes('yedek') && !s.includes('musahit'))) return 'YEDEK_UYE';
-        if (s.includes('yedekmusahit') || (s.includes('yedek') && s.includes('musahit'))) return 'YEDEK_MUSAHIT';
-        if (s.includes('musahit')) return 'MUSAHIT';
-        if (s.includes('okulsorumluyardimcisi') || s.includes('yardimci')) return 'OKUL_SORUMLU_YARDIMCISI';
-        if (s.includes('okulsorumlusu') || s.includes('okulsorumlu')) return 'OKUL_SORUMLUSU';
-        if (s.includes('avukat')) return 'AVUKAT';
-        if (s.includes('kurye')) return 'KURYE';
-        if (s.includes('bilisim')) return 'BILISIM';
-        if (s.includes('bolge') || s.includes('mahalle')) return 'BOLGE_MAHALLE';
-        
-        return 'GOREVSIZ';
-      };
-
-      const role = rawRole ? normalizeRole(rawRole) : 'GOREVSIZ';
-
-      // Format telephone (e.g. remove spaces, handle leading zero)
-      let normalizedPhone = phone.replace(/\D/g, '');
+      // Normalize phone
+      let normalizedPhone = rawPhone.replace(/\D/g, '');
       if (normalizedPhone.startsWith('90') && normalizedPhone.length === 12) {
         normalizedPhone = normalizedPhone.substring(2);
       }
@@ -475,114 +322,71 @@ async function processExcelInBackground(uploadId, filePath, district, userId, ma
       }
 
       try {
-        // Duplicate Check Logic:
         let existingMember = null;
-        if (tckn) {
+        if (parsedSno) {
           existingMember = await db.get(
-            'SELECT id, role, neighborhood FROM members WHERE first_name = ? AND last_name = ? AND tckn = ? AND district = ?',
-            [firstName, lastName, tckn, targetDistrict]
+            'SELECT id, neighborhood, phone FROM members WHERE sno = ? AND district = ?',
+            [parsedSno, targetDistrict]
           );
-        } else if (normalizedPhone) {
+        }
+
+        if (!existingMember && normalizedPhone) {
           existingMember = await db.get(
-            'SELECT id, role, neighborhood FROM members WHERE first_name = ? AND last_name = ? AND phone = ? AND district = ?',
+            'SELECT id, neighborhood, phone FROM members WHERE first_name = ? AND last_name = ? AND phone = ? AND district = ?',
             [firstName, lastName, normalizedPhone, targetDistrict]
           );
-        } else {
+        }
+
+        if (!existingMember) {
           existingMember = await db.get(
-            'SELECT id, role, neighborhood FROM members WHERE first_name = ? AND last_name = ? AND district = ?',
+            'SELECT id, neighborhood, phone FROM members WHERE first_name = ? AND last_name = ? AND district = ?',
             [firstName, lastName, targetDistrict]
           );
         }
 
         if (existingMember) {
-          // Update neighborhood if newly provided and different
-          if (neighborhood && existingMember.neighborhood !== neighborhood) {
-            await db.run(
-              'UPDATE members SET neighborhood = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-              [neighborhood, existingMember.id]
-            );
-          }
+          // Update existing member fields
+          const searchIndex = buildSearchIndex({
+            sno: parsedSno,
+            first_name: firstName,
+            last_name: lastName,
+            phone: normalizedPhone || existingMember.phone,
+            district: targetDistrict,
+            neighborhood
+          });
 
-          // If the role has changed, update it and insert timeline event log
-          if (existingMember.role !== role && role !== 'GOREVSIZ') {
-            await db.run(
-              'UPDATE members SET role = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-              [role, existingMember.id]
-            );
-
-            const roleLabels = {
-              GOREVSIZ: 'Görevsiz',
-              ASIL_UYE: 'Asil Üye',
-              YEDEK_UYE: 'Yedek Üye',
-              MUSAHIT: 'Müşahit',
-              YEDEK_MUSAHIT: 'Yedek Müşahit',
-              OKUL_SORUMLUSU: 'Okul Sorumlusu',
-              OKUL_YARDIMCISI: 'Okul Sorumlu Yardımcısı',
-              AVUKAT: 'Avukat',
-              KURYE: 'Kurye',
-              BILISIM: 'Bilişim Sorumlusu',
-              BOLGE_MAHALLE: 'Bölge/Mahalle Sorumlusu'
-            };
-
-            const oldRoleLabel = roleLabels[existingMember.role] || existingMember.role;
-            const newRoleLabel = roleLabels[role] || role;
-            const noteText = `Excel aktarımı sırasında görev güncellendi: ${oldRoleLabel} ➡️ ${newRoleLabel}`;
-
-            const eventId = 'event-' + Math.random().toString(36).substr(2, 9);
-            await db.run(
-              'INSERT INTO timeline_events (id, member_id, user_id, type, date, note) VALUES (?, ?, ?, ?, ?, ?)',
-              [eventId, existingMember.id, userId, 'ROLE_CHANGE', today, noteText]
-            );
-          }
+          await db.run(
+            `UPDATE members 
+             SET sno = ?, phone = COALESCE(NULLIF(?, ''), phone), neighborhood = ?, search_index = ?, updated_at = CURRENT_TIMESTAMP 
+             WHERE id = ?`,
+            [parsedSno, normalizedPhone, neighborhood, searchIndex, existingMember.id]
+          );
+          successCount++;
           continue;
         }
 
-        // Member doesn't exist, insert new
+        // Insert new member
         const memberId = 'member-' + Math.random().toString(36).substr(2, 9);
         const searchIndex = buildSearchIndex({
+          sno: parsedSno,
           first_name: firstName,
           last_name: lastName,
           phone: normalizedPhone,
-          tckn,
-          school,
-          ballot_no: ballotNo,
           district: targetDistrict,
           neighborhood
         });
+
         await db.run(
-          `INSERT INTO members (id, tckn, first_name, last_name, phone, province, district, neighborhood, school, ballot_no, role, search_index)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [memberId, tckn, firstName, lastName, normalizedPhone, province, targetDistrict, neighborhood || '', school, ballotNo, role, searchIndex]
+          `INSERT INTO members (id, sno, first_name, last_name, phone, district, neighborhood, vote_stance, contact_status, has_voted, search_index)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'BELIRTILMEDI', 'GORUSULMEDI', 0, ?)`,
+          [memberId, parsedSno, firstName, lastName, normalizedPhone, targetDistrict, neighborhood, searchIndex]
         );
 
-        // Add note/activity if Aciklama is present
-        if (aciklama) {
-          // Check if same note already exists for this member
-          const existingNote = await db.get(
-            'SELECT id FROM timeline_events WHERE member_id = ? AND note = ?',
-            [memberId, aciklama]
-          );
-          if (!existingNote) {
-            const eventId = 'event-' + Math.random().toString(36).substr(2, 9);
-            await db.run(
-              'INSERT INTO timeline_events (id, member_id, user_id, type, date, note) VALUES (?, ?, ?, ?, ?, ?)',
-              [eventId, memberId, userId, 'NOTE', today, aciklama]
-            );
-          }
-        } else {
-          // Log initial import
-          const existingImportLog = await db.get(
-            "SELECT id FROM timeline_events WHERE member_id = ? AND type = 'SYSTEM' AND note LIKE '%Excel%'",
-            [memberId]
-          );
-          if (!existingImportLog) {
-            const eventId = 'event-' + Math.random().toString(36).substr(2, 9);
-            await db.run(
-              'INSERT INTO timeline_events (id, member_id, user_id, type, date, note) VALUES (?, ?, ?, ?, ?, ?)',
-              [eventId, memberId, userId, 'SYSTEM', today, 'Excel içe aktarma ile eklendi/güncellendi.']
-            );
-          }
-        }
+        const eventId = 'event-' + Math.random().toString(36).substr(2, 9);
+        await db.run(
+          'INSERT INTO timeline_events (id, member_id, user_id, type, date, note) VALUES (?, ?, ?, ?, ?, ?)',
+          [eventId, memberId, userId, 'SYSTEM', today, 'Excel içe aktarma ile listeye eklendi.']
+        );
 
         successCount++;
       } catch (err) {
@@ -593,7 +397,6 @@ async function processExcelInBackground(uploadId, filePath, district, userId, ma
 
     await db.run('COMMIT');
 
-    // Update status to COMPLETED
     await db.run(
       'UPDATE uploads SET status = ?, error = ? WHERE id = ?',
       ['COMPLETED', `Başarıyla işlenen: ${successCount}, Hatalı: ${errorCount}`, uploadId]
@@ -605,10 +408,9 @@ async function processExcelInBackground(uploadId, filePath, district, userId, ma
       try {
         await db.run('ROLLBACK');
       } catch (rollbackErr) {
-        // Already rolled back or not in transaction
+        // Rollback failed or already completed
       }
     }
-    // Update status to FAILED
     try {
       const db = await getDb();
       await db.run(
@@ -619,7 +421,6 @@ async function processExcelInBackground(uploadId, filePath, district, userId, ma
       console.error('Failed to log error to DB:', dbErr);
     }
   } finally {
-    // Delete file to save space
     if (fs.existsSync(filePath)) {
       try {
         fs.unlinkSync(filePath);

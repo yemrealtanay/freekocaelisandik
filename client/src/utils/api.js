@@ -118,11 +118,15 @@ export const api = {
       if (params.neighborhood) query.append('neighborhood', params.neighborhood);
       if (params.vote_stance) query.append('vote_stance', params.vote_stance);
       if (params.contact_status) query.append('contact_status', params.contact_status);
+      if (params.voted_status) query.append('voted_status', params.voted_status);
       if (params.role) query.append('role', params.role);
       if (params.search) query.append('search', params.search);
       return request(`/api/members?${query.toString()}`);
     },
     getNeighborhoods: (district = '') => request(`/api/members/neighborhoods${district ? `?district=${encodeURIComponent(district)}` : ''}`),
+    toggleVote: (id) => request(`/api/members/${id}/toggle-vote`, {
+      method: 'PATCH'
+    }),
     create: (memberData) => request('/api/members', {
       method: 'POST',
       body: JSON.stringify(memberData)

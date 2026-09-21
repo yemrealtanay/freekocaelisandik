@@ -20,6 +20,7 @@ export default function App() {
   // Filter drilldown from dashboard to members
   const [targetNeighborhood, setTargetNeighborhood] = useState(null);
   const [targetStance, setTargetStance] = useState(null);
+  const [targetVotedStatus, setTargetVotedStatus] = useState(null);
 
   // Active background upload ID tracker
   const [activeUploadId, setActiveUploadId] = useState(null);
@@ -72,9 +73,10 @@ export default function App() {
     setActiveUploadId(null);
   };
 
-  const handleNavigateToMembers = (neighborhood, stance) => {
+  const handleNavigateToMembers = (neighborhood, stance, votedStatus) => {
     setTargetNeighborhood(neighborhood);
     setTargetStance(stance);
+    setTargetVotedStatus(votedStatus);
     setActiveTab('members');
   };
 
@@ -140,6 +142,7 @@ export default function App() {
             currentUser={currentUser} 
             initialNeighborhood={targetNeighborhood}
             initialStance={targetStance}
+            initialVotedStatus={targetVotedStatus}
           />
         )}
 
@@ -159,6 +162,7 @@ export default function App() {
           onClick={() => {
             setTargetNeighborhood(null);
             setTargetStance(null);
+            setTargetVotedStatus(null);
             setActiveTab('members');
           }}
         >

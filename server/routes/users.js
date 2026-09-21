@@ -229,6 +229,7 @@ router.get('/dashboard-stats', requireAuth, async (req, res) => {
       DESTEKLIYOR: 0,
       KARARSIZ: 0,
       MESAFELI: 0,
+      GELMEYECEK: 0,
       BELIRTILMEDI: 0
     };
     stanceRows.forEach(r => {
@@ -242,30 +243,43 @@ router.get('/dashboard-stats', requireAuth, async (req, res) => {
     // 4. Contacted vs Not Contacted
     const contactedResult = await db.get(
       `SELECT COUNT(*) as count FROM members
-       WHERE ${whereClause} AND (contact_status = 'GORUSULDU' OR vote_stance IN ('DESTEKLIYOR', 'KARARSIZ', 'MESAFELI'))`,
+       WHERE ${whereClause} AND (contact_status = 'GORUSULDU' OR vote_stance IN ('DESTEKLIYOR', 'KARARSIZ', 'MESAFELI', 'GELMEYECEK'))`,
       queryParams
     );
     const contactedMembers = contactedResult ? contactedResult.count : 0;
     const notContactedMembers = Math.max(0, totalMembers - contactedMembers);
     const contactRate = totalMembers > 0 ? Math.round((contactedMembers / totalMembers) * 100) : 0;
 
-    // 5. Neighborhood Breakdown
+    // 5. Election Day Voting Statistics
+    const votedResult = await db.get(
+      `SELECT COUNT(*) as count FROM members WHERE ${whereClause} AND has_voted = 1`,
+      queryParams
+    );
+    const votedMembers = votedResult ? votedResult.count : 0;
+    const notVotedMembers = Math.max(0, totalMembers - votedMembers);
+    const votingRate = totalMembers > 0 ? Math.round((votedMembers / totalMembers) * 100) : 0;
+
+    // 6. Neighborhood Breakdown (with 48 official neighborhoods)
     const neighborhoodRows = await db.all(`
       SELECT
-        neighborhood,
-        COUNT(*) as total_members,
-        SUM(CASE WHEN contact_status = 'GORUSULDU' OR vote_stance IN ('DESTEKLIYOR', 'KARARSIZ', 'MESAFELI') THEN 1 ELSE 0 END) as contacted_count,
-        SUM(CASE WHEN vote_stance = 'DESTEKLIYOR' THEN 1 ELSE 0 END) as destekliyor_count,
-        SUM(CASE WHEN vote_stance = 'KARARSIZ' THEN 1 ELSE 0 END) as kararsiz_count,
-        SUM(CASE WHEN vote_stance = 'MESAFELI' THEN 1 ELSE 0 END) as mesafeli_count,
-        SUM(CASE WHEN vote_stance = 'BELIRTILMEDI' OR vote_stance IS NULL THEN 1 ELSE 0 END) as belirtilmedi_count
-      FROM members
-      WHERE ${whereClause} AND neighborhood IS NOT NULL AND neighborhood != ''
-      GROUP BY neighborhood
-      ORDER BY total_members DESC, neighborhood ASC
+        n.name as neighborhood,
+        COUNT(m.id) as total_members,
+        SUM(CASE WHEN m.contact_status = 'GORUSULDU' OR m.vote_stance IN ('DESTEKLIYOR', 'KARARSIZ', 'MESAFELI', 'GELMEYECEK') THEN 1 ELSE 0 END) as contacted_count,
+        SUM(CASE WHEN m.vote_stance = 'DESTEKLIYOR' THEN 1 ELSE 0 END) as destekliyor_count,
+        SUM(CASE WHEN m.vote_stance = 'KARARSIZ' THEN 1 ELSE 0 END) as kararsiz_count,
+        SUM(CASE WHEN m.vote_stance = 'MESAFELI' THEN 1 ELSE 0 END) as mesafeli_count,
+        SUM(CASE WHEN m.vote_stance = 'GELMEYECEK' THEN 1 ELSE 0 END) as gelmeyecek_count,
+        SUM(CASE WHEN m.vote_stance = 'BELIRTILMEDI' OR m.vote_stance IS NULL OR m.vote_stance = '' THEN 1 ELSE 0 END) as belirtilmedi_count,
+        SUM(CASE WHEN m.has_voted = 1 THEN 1 ELSE 0 END) as voted_count,
+        SUM(CASE WHEN m.has_voted = 0 OR m.has_voted IS NULL THEN 1 ELSE 0 END) as not_voted_count
+      FROM neighborhoods n
+      LEFT JOIN members m ON m.neighborhood = n.name AND m.district = n.district
+      WHERE n.district = ? ${scopedNeighborhoods.length ? `AND n.name IN (${scopedNeighborhoods.map(() => '?').join(', ')})` : ''}
+      GROUP BY n.name
+      ORDER BY total_members DESC, n.name ASC
     `, queryParams);
 
-    // 6. Representative Activity Statistics
+    // 7. Representative Activity Statistics
     // Admins see all representatives. Mahalle Sorumlulari only see their own performance.
     let repQuery = `
       SELECT
@@ -303,8 +317,15 @@ router.get('/dashboard-stats', requireAuth, async (req, res) => {
       contactedMembers,
       notContactedMembers,
       contactRate,
+      votedMembers,
+      notVotedMembers,
+      votingRate,
       stanceBreakdown,
-      neighborhoodsData: neighborhoodRows,
+      neighborhoodsData: neighborhoodRows.map(r => ({
+        ...r,
+        contact_rate: r.total_members > 0 ? Math.round((r.contacted_count / r.total_members) * 100) : 0,
+        voting_rate: r.total_members > 0 ? Math.round((r.voted_count / r.total_members) * 100) : 0
+      })),
       representativeStats: representativeRows
     });
   } catch (error) {

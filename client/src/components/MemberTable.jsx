@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowRight, Phone, MapPin, CheckCircle, Clock } from 'lucide-react';
+import { ArrowRight, Phone, MapPin, CheckCircle, Clock, CheckCircle2 } from 'lucide-react';
 
 export function formatPhone(phone) {
   if (!phone) return '-';
@@ -18,11 +18,12 @@ export function getStanceLabel(stance) {
     case 'DESTEKLIYOR': return 'Destekliyor';
     case 'KARARSIZ': return 'Kararsız';
     case 'MESAFELI': return 'Mesafeli';
+    case 'GELMEYECEK': return 'Oy Vermeye Gelmeyecek';
     default: return 'Henüz Görüşülmedi';
   }
 }
 
-export default function MemberTable({ members, onSelectMember, onStanceChange }) {
+export default function MemberTable({ members, onSelectMember, onStanceChange, onToggleVote }) {
   if (!members || members.length === 0) {
     return (
       <div style={{ textAlign: 'center', padding: '48px', color: 'var(--text-muted)' }}>
@@ -36,10 +37,12 @@ export default function MemberTable({ members, onSelectMember, onStanceChange })
       <table className="custom-table">
         <thead>
           <tr>
+            <th style={{ width: '60px' }}>SNo</th>
             <th>Ad Soyad</th>
             <th>Telefon</th>
             <th>Mahalle</th>
             <th>Seçmen İntibası</th>
+            <th style={{ textAlign: 'center' }}>🗳️ Seçim Günü Oy Durumu</th>
             <th>Görüşme Durumu</th>
             <th>Son Görüşme</th>
             <th style={{ textAlign: 'right' }}>İşlemler</th>
@@ -49,9 +52,13 @@ export default function MemberTable({ members, onSelectMember, onStanceChange })
           {members.map((member) => {
             const rawStance = member.vote_stance || 'BELIRTILMEDI';
             const isContacted = member.contact_status === 'GORUSULDU' || (rawStance && rawStance !== 'BELIRTILMEDI');
+            const isVoted = member.has_voted === 1;
 
             return (
               <tr key={member.id}>
+                <td style={{ fontWeight: 700, fontFamily: 'monospace', color: 'var(--text-muted)' }}>
+                  {member.sno ? `#${member.sno}` : '—'}
+                </td>
                 <td>
                   <div className="member-name-cell" onClick={() => onSelectMember(member)} style={{ cursor: 'pointer' }}>
                     <span className="member-fullname">
@@ -107,8 +114,29 @@ export default function MemberTable({ members, onSelectMember, onStanceChange })
                     <option value="DESTEKLIYOR" style={{ backgroundColor: 'var(--bg-surface)', color: '#34d399' }}>🟢 Destekliyor</option>
                     <option value="KARARSIZ" style={{ backgroundColor: 'var(--bg-surface)', color: '#fbbf24' }}>🟡 Kararsız</option>
                     <option value="MESAFELI" style={{ backgroundColor: 'var(--bg-surface)', color: '#f87171' }}>🔴 Mesafeli</option>
+                    <option value="GELMEYECEK" style={{ backgroundColor: 'var(--bg-surface)', color: '#c084fc' }}>🟣 Oy Vermeye Gelmeyecek</option>
                     <option value="BELIRTILMEDI" style={{ backgroundColor: 'var(--bg-surface)', color: 'var(--text-muted)' }}>⚪ Henüz Görüşülmedi</option>
                   </select>
+                </td>
+                <td style={{ textAlign: 'center' }}>
+                  <button
+                    type="button"
+                    className={`voted-toggle-btn ${isVoted ? 'voted' : 'not-voted'}`}
+                    onClick={() => onToggleVote && onToggleVote(member.id)}
+                    title={isVoted ? 'Oy durumunu geri al' : 'Sandıkta oy kullandı olarak işaretle'}
+                  >
+                    {isVoted ? (
+                      <>
+                        <CheckCircle2 size={14} />
+                        <span>Oy Kullandı</span>
+                      </>
+                    ) : (
+                      <>
+                        <span style={{ fontSize: '13px' }}>⏳</span>
+                        <span>Oy Kullanmadı</span>
+                      </>
+                    )}
+                  </button>
                 </td>
                 <td>
                   <span style={{ 

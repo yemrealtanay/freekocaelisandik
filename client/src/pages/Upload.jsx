@@ -1,14 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../utils/api';
-import { Upload, FileSpreadsheet, CheckCircle2, AlertCircle, RefreshCw, ArrowLeft, Play } from 'lucide-react';
-
-const DISTRICTS = [
-  'Gölcük', 'Başiskele', 'Çayırova', 'Darıca', 'Derince', 'Dilovası', 
-  'Gebze', 'İzmit', 'Kandıra', 'Karamürsel', 'Kartepe', 'Körfez'
-];
+import { Upload, FileSpreadsheet, RefreshCw, ArrowLeft, Play } from 'lucide-react';
 
 export default function UploadPage({ onUploadStart }) {
-  const [district, setDistrict] = useState(DISTRICTS[0]);
+  const [district, setDistrict] = useState('Gölcük');
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -22,16 +17,11 @@ export default function UploadPage({ onUploadStart }) {
   const [excelHeaders, setExcelHeaders] = useState([]);
   const [previewRows, setPreviewRows] = useState([]);
   const [mapping, setMapping] = useState({
-    tckn: '',
+    sno: '',
     first_name: '',
     last_name: '',
     phone: '',
-    neighborhood: '',
-    ballot_area: '',
-    ballot_no: '',
-    role: '',
-    district_name: '',
-    description: ''
+    neighborhood: ''
   });
 
   useEffect(() => {
@@ -82,7 +72,13 @@ export default function UploadPage({ onUploadStart }) {
       setTempFileId(response.tempFileId);
       setExcelHeaders(response.headers);
       setPreviewRows(response.previewRows);
-      setMapping(response.guessedMapping);
+      setMapping({
+        sno: response.guessedMapping?.sno || '',
+        first_name: response.guessedMapping?.first_name || '',
+        last_name: response.guessedMapping?.last_name || '',
+        phone: response.guessedMapping?.phone || '',
+        neighborhood: response.guessedMapping?.neighborhood || ''
+      });
       setStep('mapping');
     } catch (err) {
       setErrorMsg(err.message || 'Excel dosyası analiz edilemedi.');
@@ -98,11 +94,6 @@ export default function UploadPage({ onUploadStart }) {
       return;
     }
 
-    if (district === 'ALL_DISTRICTS' && !mapping.district_name) {
-      setErrorMsg('Eşleştirmede "İlçe Sütunu" zorunludur.');
-      return;
-    }
-
     setUploading(true);
     setErrorMsg('');
     setSuccessMsg('');
@@ -113,7 +104,6 @@ export default function UploadPage({ onUploadStart }) {
       setFile(null);
       setStep('upload');
 
-      // Reset file input
       const fileInput = document.getElementById('excel-file-input');
       if (fileInput) fileInput.value = '';
 
@@ -155,8 +145,8 @@ export default function UploadPage({ onUploadStart }) {
     <div className="page-container">
       <div className="page-header">
         <div className="page-title-area">
-          <h2 className="page-title">Excel İçe Aktar</h2>
-          <span className="page-subtitle">Sisteme dinamik sütun eşleştirmesi ile toplu üye aktarımı yapın</span>
+          <h2 className="page-title">Excel Üye Listesi İçe Aktar</h2>
+          <span className="page-subtitle">Gölcük üye listesini (SNo, Adı, Soyadı, Telefon, Mahalle) sisteme aktarın</span>
         </div>
       </div>
 
@@ -167,21 +157,18 @@ export default function UploadPage({ onUploadStart }) {
         <div className="upload-split-layout">
           {/* Step 1: Upload form */}
           <div className="table-container panel">
-            <h3 style={{ fontSize: '16px', marginBottom: '24px', color: 'var(--text-main)' }}>1. Aşama: Dosya ve İlçe Seçimi</h3>
+            <h3 style={{ fontSize: '16px', marginBottom: '24px', color: 'var(--text-main)' }}>1. Aşama: Excel Dosyası Seçimi</h3>
             
             <form onSubmit={handleAnalyzeSubmit}>
               <div className="form-group">
                 <label>Hedef İlçe</label>
-                <select
+                <input
+                  type="text"
                   className="form-control"
                   value={district}
-                  onChange={(e) => setDistrict(e.target.value)}
-                >
-                  <option value="ALL_DISTRICTS">Tüm İlçeler (Excel'den Oku)</option>
-                  {DISTRICTS.map((d) => (
-                    <option key={d} value={d}>{d}</option>
-                  ))}
-                </select>
+                  disabled
+                  style={{ backgroundColor: 'var(--bg-app)', color: 'var(--text-muted)' }}
+                />
               </div>
 
               <div className="form-group" style={{ marginBottom: '32px' }}>
@@ -221,7 +208,9 @@ export default function UploadPage({ onUploadStart }) {
                     ) : (
                       <div>
                         <div style={{ fontWeight: 600, color: 'var(--text-muted)', fontSize: '14px' }}>Dosya seçin veya buraya sürükleyin</div>
-                        <div style={{ color: 'var(--text-dim)', fontSize: '12px', marginTop: '4px' }}>Tüm Excel sütun formatları desteklenmektedir</div>
+                        <div style={{ color: 'var(--text-dim)', fontSize: '12px', marginTop: '4px' }}>
+                          Örnek format: SNo, Adı, Soyadı, Telefon, Mahalle
+                        </div>
                       </div>
                     )}
                   </div>
@@ -299,14 +288,14 @@ export default function UploadPage({ onUploadStart }) {
               <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Excel Dosyası: <strong>{file?.name}</strong></span>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px', marginBottom: '32px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px', marginBottom: '32px' }}>
               
               <div className="form-group">
                 <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <span>TC Kimlik Numarası (TCKN)</span>
+                  <span>Sıra No (SNo)</span>
                   <span style={{ color: 'var(--text-dim)', fontSize: '11px' }}>(Opsiyonel)</span>
                 </label>
-                <select className="form-control" value={mapping.tckn} onChange={(e) => handleMappingChange('tckn', e.target.value)}>
+                <select className="form-control" value={mapping.sno} onChange={(e) => handleMappingChange('sno', e.target.value)}>
                   <option value="">-- Eşleştirme Yok --</option>
                   {excelHeaders.map(h => <option key={h} value={h}>{h}</option>)}
                 </select>
@@ -336,7 +325,7 @@ export default function UploadPage({ onUploadStart }) {
 
               <div className="form-group">
                 <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <span>Cep Telefonu</span>
+                  <span>Telefon</span>
                   <span style={{ color: 'var(--text-dim)', fontSize: '11px' }}>(Opsiyonel)</span>
                 </label>
                 <select className="form-control" value={mapping.phone} onChange={(e) => handleMappingChange('phone', e.target.value)}>
@@ -348,67 +337,10 @@ export default function UploadPage({ onUploadStart }) {
               <div className="form-group">
                 <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                   <span>Mahalle</span>
-                  <span style={{ color: 'var(--primary)', fontSize: '11px', fontWeight: 600 }}>(Saha Takibi için Önemli)</span>
+                  <span style={{ color: 'var(--primary)', fontSize: '11px', fontWeight: 600 }}>(Resmi 48 Mahalle)</span>
                 </label>
                 <select className="form-control" value={mapping.neighborhood} onChange={(e) => handleMappingChange('neighborhood', e.target.value)}>
                   <option value="">-- Eşleştirme Yok --</option>
-                  {excelHeaders.map(h => <option key={h} value={h}>{h}</option>)}
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <span>Sandık Alanı / Okul</span>
-                  <span style={{ color: 'var(--text-dim)', fontSize: '11px' }}>(Opsiyonel)</span>
-                </label>
-                <select className="form-control" value={mapping.ballot_area} onChange={(e) => handleMappingChange('ballot_area', e.target.value)}>
-                  <option value="">-- Eşleştirme Yok --</option>
-                  {excelHeaders.map(h => <option key={h} value={h}>{h}</option>)}
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <span>Sandık No</span>
-                  <span style={{ color: 'var(--text-dim)', fontSize: '11px' }}>(Opsiyonel)</span>
-                </label>
-                <select className="form-control" value={mapping.ballot_no} onChange={(e) => handleMappingChange('ballot_no', e.target.value)}>
-                  <option value="">-- Eşleştirme Yok --</option>
-                  {excelHeaders.map(h => <option key={h} value={h}>{h}</option>)}
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <span>Açıklama (Timeline Notu)</span>
-                  <span style={{ color: 'var(--text-dim)', fontSize: '11px' }}>(Opsiyonel)</span>
-                </label>
-                <select className="form-control" value={mapping.description} onChange={(e) => handleMappingChange('description', e.target.value)}>
-                  <option value="">-- Eşleştirme Yok --</option>
-                  {excelHeaders.map(h => <option key={h} value={h}>{h}</option>)}
-                </select>
-              </div>
-
-              {district === 'ALL_DISTRICTS' && (
-                <div className="form-group">
-                  <label>
-                    <span>İlçe Sütunu</span>
-                    <span style={{ color: 'var(--danger)', marginLeft: '4px' }}>*</span>
-                  </label>
-                  <select className="form-control" value={mapping.district_name || ''} onChange={(e) => handleMappingChange('district_name', e.target.value)}>
-                    <option value="">-- Sütun Seçin --</option>
-                    {excelHeaders.map(h => <option key={h} value={h}>{h}</option>)}
-                  </select>
-                </div>
-              )}
-
-              <div className="form-group">
-                <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <span>Görev / Rol</span>
-                  <span style={{ color: 'var(--text-dim)', fontSize: '11px' }}>(Opsiyonel)</span>
-                </label>
-                <select className="form-control" value={mapping.role || ''} onChange={(e) => handleMappingChange('role', e.target.value)}>
-                  <option value="">-- Eşleştirme Yok (Varsayılan: Görevsiz) --</option>
                   {excelHeaders.map(h => <option key={h} value={h}>{h}</option>)}
                 </select>
               </div>
@@ -418,29 +350,24 @@ export default function UploadPage({ onUploadStart }) {
             {/* Live Preview Table */}
             <div style={{ marginTop: '24px' }}>
               <h4 style={{ fontSize: '14px', marginBottom: '16px', color: 'var(--text-muted)', fontWeight: 600 }}>
-                Canlı Önizleme (Seçtiğiniz sütunlara göre ilk 3 satır verisi)
+                Canlı Önizleme (Seçtiğiniz sütunlara göre ilk satırlar)
               </h4>
               <div style={{ overflowX: 'auto', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)' }}>
                 <table className="custom-table" style={{ width: '100%', fontSize: '13px' }}>
                   <thead>
                     <tr style={{ backgroundColor: 'var(--bg-app)' }}>
-                      <th>TCKN</th>
+                      <th>SNo</th>
                       <th>Adı</th>
                       <th>Soyadı</th>
-                      <th>Cep Telefonu</th>
+                      <th>Telefon</th>
                       <th>Mahalle</th>
-                      <th>Sandık Alanı (Okul)</th>
-                      <th>Sandık No</th>
-                      <th>Görev / Rol</th>
-                      {district === 'ALL_DISTRICTS' && <th>İlçe</th>}
-                      <th>Açıklama</th>
                     </tr>
                   </thead>
                   <tbody>
                     {previewRows.map((row, idx) => (
                       <tr key={idx}>
-                        <td style={{ color: mapping.tckn ? 'var(--text-main)' : 'var(--text-dim)' }}>
-                          {mapping.tckn ? String(row[mapping.tckn] || '') : '—'}
+                        <td style={{ color: mapping.sno ? 'var(--text-main)' : 'var(--text-dim)', fontWeight: 600, fontFamily: 'monospace' }}>
+                          {mapping.sno ? String(row[mapping.sno] || '') : '—'}
                         </td>
                         <td style={{ fontWeight: 600, color: mapping.first_name ? 'var(--text-main)' : 'var(--text-dim)' }}>
                           {mapping.first_name ? String(row[mapping.first_name] || '').toUpperCase() : '—'}
@@ -453,23 +380,6 @@ export default function UploadPage({ onUploadStart }) {
                         </td>
                         <td style={{ color: mapping.neighborhood ? 'var(--text-main)' : 'var(--text-dim)', fontWeight: 500 }}>
                           {mapping.neighborhood ? String(row[mapping.neighborhood] || '') : '—'}
-                        </td>
-                        <td style={{ color: mapping.ballot_area ? 'var(--text-main)' : 'var(--text-dim)' }}>
-                          {mapping.ballot_area ? String(row[mapping.ballot_area] || '') : '—'}
-                        </td>
-                        <td style={{ color: mapping.ballot_no ? 'var(--text-main)' : 'var(--text-dim)' }}>
-                          {mapping.ballot_no ? String(row[mapping.ballot_no] || '') : '—'}
-                        </td>
-                        <td style={{ color: mapping.role ? 'var(--text-main)' : 'var(--text-dim)' }}>
-                          {mapping.role ? String(row[mapping.role] || '') : '—'}
-                        </td>
-                        {district === 'ALL_DISTRICTS' && (
-                          <td style={{ color: mapping.district_name ? 'var(--text-main)' : 'var(--text-dim)', fontWeight: 500 }}>
-                            {mapping.district_name ? String(row[mapping.district_name] || '') : '—'}
-                          </td>
-                        )}
-                        <td style={{ color: mapping.description ? 'var(--text-muted)' : 'var(--text-dim)', fontSize: '12px' }}>
-                          {mapping.description ? String(row[mapping.description] || '') : '—'}
                         </td>
                       </tr>
                     ))}

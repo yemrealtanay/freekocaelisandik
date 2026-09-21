@@ -124,6 +124,14 @@ async function getDb() {
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS user_neighborhoods (
+      user_id TEXT NOT NULL,
+      neighborhood TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (user_id, neighborhood),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS neighborhoods (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       district TEXT NOT NULL DEFAULT 'Gölcük',
@@ -235,7 +243,17 @@ async function getDb() {
       'INSERT INTO users (id, name, email, password_hash, district, neighborhood, role, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       [repId, 'Ahmet Yılmaz (Mahalle Sorumlusu)', 'sorumlu@kocaeli-org.local', passwordHash, 'Gölcük', 'DEĞİRMENDERE MERKEZ MAH.', 'USER', 'ACTIVE']
     );
+    await db.run(
+      'INSERT OR IGNORE INTO user_neighborhoods (user_id, neighborhood) VALUES (?, ?)',
+      [repId, 'DEĞİRMENDERE MERKEZ MAH.']
+    );
     console.log('Seeded default mahalle sorumlusu successfully.');
+  } else {
+    // Ensure user_neighborhoods has entry
+    await db.run(
+      'INSERT OR IGNORE INTO user_neighborhoods (user_id, neighborhood) VALUES (?, ?)',
+      [repExists.id, 'DEĞİRMENDERE MERKEZ MAH.']
+    );
   }
 
   return db;

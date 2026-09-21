@@ -1,5 +1,5 @@
 import React from 'react';
-import { Phone, PhoneCall, MapPin, MessageSquarePlus, Clock, AlertCircle } from 'lucide-react';
+import { PhoneCall, MapPin, MessageSquarePlus, Clock, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { formatPhone } from './MemberTable';
 
 export function getStanceLabel(stance) {
@@ -7,11 +7,12 @@ export function getStanceLabel(stance) {
     case 'DESTEKLIYOR': return 'Destekliyor';
     case 'KARARSIZ': return 'Kararsız';
     case 'MESAFELI': return 'Mesafeli';
+    case 'GELMEYECEK': return 'Gelmeyecek';
     default: return 'Henüz Görüşülmedi';
   }
 }
 
-export default function MemberCardView({ members, onSelectMember, onStanceChange }) {
+export default function MemberCardView({ members, onSelectMember, onStanceChange, onToggleVote }) {
   if (!members || members.length === 0) {
     return (
       <div style={{ 
@@ -37,16 +38,20 @@ export default function MemberCardView({ members, onSelectMember, onStanceChange
       {members.map((member) => {
         const cleanPhone = member.phone ? member.phone.replace(/\D/g, '') : '';
         const rawStance = member.vote_stance || 'BELIRTILMEDI';
+        const isVoted = member.has_voted === 1;
 
         return (
           <div key={member.id} className="mobile-card">
-            {/* Top Bar: Name & Mahalle */}
+            {/* Top Bar: Name, SNo, Mahalle & Election Day Fast Voting Button */}
             <div className="mobile-card-header">
               <div style={{ flex: 1, minWidth: 0, cursor: 'pointer' }} onClick={() => onSelectMember(member)}>
-                <div className="mobile-card-title">
-                  {member.first_name} {member.last_name}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {member.sno && <span className="sno-badge">#{member.sno}</span>}
+                  <div className="mobile-card-title">
+                    {member.first_name} {member.last_name}
+                  </div>
                 </div>
-                <div className="mobile-card-meta" style={{ marginTop: '4px' }}>
+                <div className="mobile-card-meta" style={{ marginTop: '6px' }}>
                   {member.neighborhood ? (
                     <span className="neighborhood-badge">
                       <MapPin size={10} />
@@ -59,6 +64,31 @@ export default function MemberCardView({ members, onSelectMember, onStanceChange
                     {getStanceLabel(rawStance)}
                   </span>
                 </div>
+              </div>
+
+              {/* 1-Tap Election Day Voting Toggle */}
+              <div>
+                <button
+                  type="button"
+                  className={`voted-toggle-btn ${isVoted ? 'voted' : 'not-voted'}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (onToggleVote) onToggleVote(member.id);
+                  }}
+                  title={isVoted ? 'Oyu geri al (Oy kullanmadı yap)' : 'Sandıkta oy kullandı olarak işaretle'}
+                >
+                  {isVoted ? (
+                    <>
+                      <CheckCircle2 size={15} />
+                      <span>Oy Kullandı</span>
+                    </>
+                  ) : (
+                    <>
+                      <span style={{ fontSize: '14px' }}>🗳️</span>
+                      <span>Oy Kullanmadı</span>
+                    </>
+                  )}
+                </button>
               </div>
             </div>
 
@@ -85,7 +115,7 @@ export default function MemberCardView({ members, onSelectMember, onStanceChange
               </div>
             )}
 
-            {/* 4-Stance Quick Selection Buttons */}
+            {/* 5-Stance Quick Selection Buttons */}
             <div>
               <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '6px', textTransform: 'uppercase' }}>
                 Seçmen İntibası (Tek Tıkla Seç)
@@ -120,6 +150,15 @@ export default function MemberCardView({ members, onSelectMember, onStanceChange
 
                 <button
                   type="button"
+                  className={`stance-btn ${rawStance === 'GELMEYECEK' ? 'active GELMEYECEK' : ''}`}
+                  onClick={() => onStanceChange(member.id, 'GELMEYECEK')}
+                >
+                  <span style={{ fontSize: '14px' }}>🟣</span>
+                  <span>Gelmeyecek</span>
+                </button>
+
+                <button
+                  type="button"
                   className={`stance-btn ${rawStance === 'BELIRTILMEDI' ? 'active BELIRTILMEDI' : ''}`}
                   onClick={() => onStanceChange(member.id, 'BELIRTILMEDI')}
                 >
@@ -146,6 +185,11 @@ export default function MemberCardView({ members, onSelectMember, onStanceChange
                 </span>
                 {member.latest_action_user && (
                   <span>Sorumlu: <strong>{member.latest_action_user}</strong></span>
+                )}
+                {isVoted && member.voted_at && (
+                  <span style={{ color: '#34d399', fontWeight: 600 }}>
+                    Oy Saati: {new Date(member.voted_at).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
                 )}
               </div>
               <div style={{ color: member.latest_note ? 'var(--text-main)' : 'var(--text-dim)', fontStyle: member.latest_note ? 'normal' : 'italic' }}>

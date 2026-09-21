@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../utils/api';
 import { NeighborhoodChips } from '../components/NeighborhoodPicker';
-import { Users, PhoneCall, CheckCircle2, AlertCircle, TrendingUp, UserCheck, Clock, MapPin, ExternalLink, RefreshCw } from 'lucide-react';
+import { Users, PhoneCall, CheckCircle2, Clock, MapPin, RefreshCw, CheckCheck, TrendingUp } from 'lucide-react';
 
 const PREDEFINED_DISTRICTS = [
   'Gölcük', 'Başiskele', 'Çayırova', 'Darıca', 'Derince', 'Dilovası', 
@@ -60,10 +60,15 @@ export default function Dashboard({ currentUser, onNavigateToMembers }) {
   const notContactedMembers = stats?.notContactedMembers || 0;
   const contactRate = stats?.contactRate || 0;
 
+  const votedMembers = stats?.votedMembers || 0;
+  const notVotedMembers = stats?.notVotedMembers || 0;
+  const votingRate = stats?.votingRate || 0;
+
   const stance = stats?.stanceBreakdown || {
     DESTEKLIYOR: 0,
     KARARSIZ: 0,
     MESAFELI: 0,
+    GELMEYECEK: 0,
     BELIRTILMEDI: 0
   };
 
@@ -75,6 +80,7 @@ export default function Dashboard({ currentUser, onNavigateToMembers }) {
   const destekPercent = getPercent(stance.DESTEKLIYOR);
   const kararsizPercent = getPercent(stance.KARARSIZ);
   const mesafeliPercent = getPercent(stance.MESAFELI);
+  const gelmeyecekPercent = getPercent(stance.GELMEYECEK);
   const belirtilmediPercent = getPercent(stance.BELIRTILMEDI);
 
   return (
@@ -83,7 +89,7 @@ export default function Dashboard({ currentUser, onNavigateToMembers }) {
       <div className="page-header">
         <div className="page-title-area">
           <div className="page-title">
-            <span>Saha ve Seçmen Genel Bakışı</span>
+            <span>Saha ve Seçim Genel Bakışı</span>
             {isAdmin ? (
               <select
                 className="district-select-dropdown"
@@ -106,10 +112,10 @@ export default function Dashboard({ currentUser, onNavigateToMembers }) {
           </div>
           <span className="page-subtitle">
             {assignedNeighborhoods.length === 1
-              ? `${assignedNeighborhoods[0]} Mahallesi saha görüşmeleri ve seçmen intiba istatistikleri`
+              ? `${assignedNeighborhoods[0]} Mahallesi saha çalışmaları, seçmen intibası ve sandık oy takibi`
               : assignedNeighborhoods.length > 1
-                ? `Size atanan ${assignedNeighborhoods.length} mahallenin saha görüşmeleri ve seçmen intiba istatistikleri`
-                : 'Gölcük saha görüşmeleri, seçmen eğilimi ve mahalle sorumlusu performansı'}
+                ? `Size atanan ${assignedNeighborhoods.length} mahallenin saha ve sandık verileri`
+                : 'Gölcük 48 mahalle üye intibası ve seçim günü katılım takibi'}
           </span>
         </div>
 
@@ -125,6 +131,8 @@ export default function Dashboard({ currentUser, onNavigateToMembers }) {
 
       {/* Main KPI Stat Cards */}
       <div className="stat-grid" style={{ marginBottom: '24px' }}>
+        
+        {/* Card 1: Toplam Üye */}
         <div className="stat-card">
           <span className="stat-label">Toplam Kayıtlı Üye</span>
           <span className="stat-value">{totalMembers.toLocaleString('tr-TR')}</span>
@@ -133,54 +141,80 @@ export default function Dashboard({ currentUser, onNavigateToMembers }) {
           </div>
         </div>
 
-        <div className="stat-card" style={{ borderColor: 'rgba(16, 185, 129, 0.3)' }}>
+        {/* Card 2: Seçim Günü Oy Kullanan (Highlight) */}
+        <div className="stat-card" style={{ 
+          borderColor: 'rgba(16, 185, 129, 0.4)', 
+          background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, var(--bg-card) 100%)' 
+        }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span className="stat-label">Görüşülen Seçmen</span>
+            <span className="stat-label">🗳️ Seçim Günü Oy Kullanan</span>
             <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--success)', backgroundColor: 'rgba(16, 185, 129, 0.15)', padding: '2px 8px', borderRadius: '12px' }}>
-              %{contactRate}
+              Katılım: %{votingRate}
             </span>
           </div>
           <span className="stat-value" style={{ color: 'var(--success)' }}>
+            {votedMembers.toLocaleString('tr-TR')}
+          </span>
+          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
+            Henüz oy kullanmayan: <strong>{notVotedMembers.toLocaleString('tr-TR')}</strong> üye
+          </div>
+          <div className="stat-icon-wrapper">
+            <CheckCheck size={28} style={{ color: 'var(--success)' }} />
+          </div>
+        </div>
+
+        {/* Card 3: Görüşülen Seçmen */}
+        <div className="stat-card" style={{ borderColor: 'rgba(59, 130, 246, 0.3)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span className="stat-label">Saha İletişimi Kurulan</span>
+            <span style={{ fontSize: '12px', fontWeight: 700, color: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.15)', padding: '2px 8px', borderRadius: '12px' }}>
+              %{contactRate}
+            </span>
+          </div>
+          <span className="stat-value" style={{ color: '#3b82f6' }}>
             {contactedMembers.toLocaleString('tr-TR')}
           </span>
+          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
+            Görüşülmeyen: {notContactedMembers.toLocaleString('tr-TR')} üye
+          </div>
           <div className="stat-icon-wrapper">
-            <PhoneCall size={28} style={{ color: 'var(--success)' }} />
+            <PhoneCall size={28} style={{ color: '#3b82f6' }} />
           </div>
         </div>
 
+        {/* Card 4: Destekleyen Üye Oranı */}
         <div className="stat-card">
-          <span className="stat-label">Henüz Görüşülmeyen</span>
-          <span className="stat-value" style={{ color: 'var(--text-muted)' }}>
-            {notContactedMembers.toLocaleString('tr-TR')}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span className="stat-label">Destekleyen Seçmen</span>
+            <span style={{ fontSize: '12px', fontWeight: 700, color: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.12)', padding: '2px 8px', borderRadius: '12px' }}>
+              %{destekPercent}
+            </span>
+          </div>
+          <span className="stat-value" style={{ color: '#10b981' }}>
+            {stance.DESTEKLIYOR.toLocaleString('tr-TR')}
           </span>
+          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
+            Kararsız: {stance.KARARSIZ.toLocaleString('tr-TR')} &bull; Mesafeli: {stance.MESAFELI.toLocaleString('tr-TR')}
+          </div>
           <div className="stat-icon-wrapper">
-            <Clock size={28} style={{ color: 'var(--text-dim)' }} />
+            <TrendingUp size={28} style={{ color: '#10b981' }} />
           </div>
         </div>
 
-        <div className="stat-card" style={{ borderColor: 'rgba(59, 130, 246, 0.3)' }}>
-          <span className="stat-label">Destekleyen Oranı</span>
-          <span className="stat-value" style={{ color: '#3b82f6' }}>
-            %{destekPercent}
-          </span>
-          <div className="stat-icon-wrapper">
-            <TrendingUp size={28} style={{ color: '#3b82f6' }} />
-          </div>
-        </div>
       </div>
 
       {/* Voter Stance Breakdown Bar & Cards */}
       <div className="table-container panel" style={{ marginBottom: '24px' }}>
         <div className="section-head">
           <div>
-            <h3 style={{ fontSize: '16px', fontWeight: 700, margin: 0 }}>Seçmen İntibası ve Eğilim Dağılımı</h3>
+            <h3 style={{ fontSize: '16px', fontWeight: 700, margin: 0 }}>Seçmen İntibası ve Saha Dağılımı</h3>
             <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: '4px 0 0' }}>
-              Görüşme yapılan üyelerin siyasi tercihi ve saha intiba analizleri
+              Gölcük üyelerinin siyasi eğilimi, katılım niyeti ve saha intiba sonuçları
             </p>
           </div>
         </div>
 
-        {/* Visual Progress Bar */}
+        {/* Visual Progress Bar (5 Segments) */}
         <div className="distribution-bar" style={{ height: '24px', borderRadius: '8px', marginBottom: '16px' }}>
           <div 
             className="distribution-segment DESTEKLIYOR" 
@@ -198,30 +232,35 @@ export default function Dashboard({ currentUser, onNavigateToMembers }) {
             title={`Mesafeli: ${stance.MESAFELI} kişi (%${mesafeliPercent})`}
           />
           <div 
+            className="distribution-segment GELMEYECEK" 
+            style={{ width: `${gelmeyecekPercent}%` }} 
+            title={`Oy Vermeye Gelmeyecek: ${stance.GELMEYECEK} kişi (%${gelmeyecekPercent})`}
+          />
+          <div 
             className="distribution-segment BELIRTILMEDI" 
             style={{ width: `${belirtilmediPercent}%` }} 
             title={`Henüz Görüşülmedi: ${stance.BELIRTILMEDI} kişi (%${belirtilmediPercent})`}
           />
         </div>
 
-        {/* 4 Stance Quick Filter Cards */}
-        <div className="stance-summary-grid">
+        {/* 5 Stance Quick Filter Cards */}
+        <div className="stance-summary-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
           
           <div 
             style={{ 
               backgroundColor: 'rgba(16, 185, 129, 0.08)', 
               border: '1px solid rgba(16, 185, 129, 0.25)', 
               borderRadius: 'var(--radius-md)', 
-              padding: '16px',
+              padding: '14px',
               cursor: onNavigateToMembers ? 'pointer' : 'default'
             }}
             onClick={() => onNavigateToMembers && onNavigateToMembers('TUM', 'DESTEKLIYOR')}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-              <span style={{ fontSize: '13px', fontWeight: 600, color: '#10b981' }}>🟢 Destekliyor</span>
+              <span style={{ fontSize: '12.5px', fontWeight: 600, color: '#10b981' }}>🟢 Destekliyor</span>
               <span style={{ fontSize: '12px', fontWeight: 700, color: '#10b981' }}>%{destekPercent}</span>
             </div>
-            <div style={{ fontSize: '24px', fontWeight: 700, color: 'var(--text-main)' }}>
+            <div style={{ fontSize: '22px', fontWeight: 700, color: 'var(--text-main)' }}>
               {stance.DESTEKLIYOR.toLocaleString('tr-TR')}
             </div>
           </div>
@@ -231,16 +270,16 @@ export default function Dashboard({ currentUser, onNavigateToMembers }) {
               backgroundColor: 'rgba(245, 158, 11, 0.08)', 
               border: '1px solid rgba(245, 158, 11, 0.25)', 
               borderRadius: 'var(--radius-md)', 
-              padding: '16px',
+              padding: '14px',
               cursor: onNavigateToMembers ? 'pointer' : 'default'
             }}
             onClick={() => onNavigateToMembers && onNavigateToMembers('TUM', 'KARARSIZ')}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-              <span style={{ fontSize: '13px', fontWeight: 600, color: '#f59e0b' }}>🟡 Kararsız</span>
+              <span style={{ fontSize: '12.5px', fontWeight: 600, color: '#f59e0b' }}>🟡 Kararsız</span>
               <span style={{ fontSize: '12px', fontWeight: 700, color: '#f59e0b' }}>%{kararsizPercent}</span>
             </div>
-            <div style={{ fontSize: '24px', fontWeight: 700, color: 'var(--text-main)' }}>
+            <div style={{ fontSize: '22px', fontWeight: 700, color: 'var(--text-main)' }}>
               {stance.KARARSIZ.toLocaleString('tr-TR')}
             </div>
           </div>
@@ -250,17 +289,36 @@ export default function Dashboard({ currentUser, onNavigateToMembers }) {
               backgroundColor: 'rgba(239, 68, 68, 0.08)', 
               border: '1px solid rgba(239, 68, 68, 0.25)', 
               borderRadius: 'var(--radius-md)', 
-              padding: '16px',
+              padding: '14px',
               cursor: onNavigateToMembers ? 'pointer' : 'default'
             }}
             onClick={() => onNavigateToMembers && onNavigateToMembers('TUM', 'MESAFELI')}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-              <span style={{ fontSize: '13px', fontWeight: 600, color: '#ef4444' }}>🔴 Mesafeli</span>
+              <span style={{ fontSize: '12.5px', fontWeight: 600, color: '#ef4444' }}>🔴 Mesafeli</span>
               <span style={{ fontSize: '12px', fontWeight: 700, color: '#ef4444' }}>%{mesafeliPercent}</span>
             </div>
-            <div style={{ fontSize: '24px', fontWeight: 700, color: 'var(--text-main)' }}>
+            <div style={{ fontSize: '22px', fontWeight: 700, color: 'var(--text-main)' }}>
               {stance.MESAFELI.toLocaleString('tr-TR')}
+            </div>
+          </div>
+
+          <div 
+            style={{ 
+              backgroundColor: 'rgba(139, 92, 246, 0.08)', 
+              border: '1px solid rgba(139, 92, 246, 0.25)', 
+              borderRadius: 'var(--radius-md)', 
+              padding: '14px',
+              cursor: onNavigateToMembers ? 'pointer' : 'default'
+            }}
+            onClick={() => onNavigateToMembers && onNavigateToMembers('TUM', 'GELMEYECEK')}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+              <span style={{ fontSize: '12.5px', fontWeight: 600, color: '#c084fc' }}>🟣 Gelmeyecek</span>
+              <span style={{ fontSize: '12px', fontWeight: 700, color: '#c084fc' }}>%{gelmeyecekPercent}</span>
+            </div>
+            <div style={{ fontSize: '22px', fontWeight: 700, color: 'var(--text-main)' }}>
+              {stance.GELMEYECEK.toLocaleString('tr-TR')}
             </div>
           </div>
 
@@ -269,16 +327,16 @@ export default function Dashboard({ currentUser, onNavigateToMembers }) {
               backgroundColor: 'rgba(100, 116, 139, 0.08)', 
               border: '1px solid rgba(100, 116, 139, 0.25)', 
               borderRadius: 'var(--radius-md)', 
-              padding: '16px',
+              padding: '14px',
               cursor: onNavigateToMembers ? 'pointer' : 'default'
             }}
             onClick={() => onNavigateToMembers && onNavigateToMembers('TUM', 'BELIRTILMEDI')}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-              <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-muted)' }}>⚪ Henüz Görüşülmedi</span>
+              <span style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--text-muted)' }}>⚪ Görüşülmedi</span>
               <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-muted)' }}>%{belirtilmediPercent}</span>
             </div>
-            <div style={{ fontSize: '24px', fontWeight: 700, color: 'var(--text-main)' }}>
+            <div style={{ fontSize: '22px', fontWeight: 700, color: 'var(--text-main)' }}>
               {stance.BELIRTILMEDI.toLocaleString('tr-TR')}
             </div>
           </div>
@@ -286,24 +344,22 @@ export default function Dashboard({ currentUser, onNavigateToMembers }) {
         </div>
       </div>
 
-      {/* Two Detailed Tables */}
+      {/* Detailed Tables */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
         
-        {/* Table 1: Mahallelere Göre Dağılım */}
+        {/* Table 1: Mahallelere Göre Saha ve Seçim Katılım Dağılımı */}
         <div className="table-container panel">
           <div className="section-head">
             <div>
               <h3 style={{ fontSize: '16px', fontWeight: 700, margin: 0 }}>
                 {stats?.isNeighborhoodScoped
                   ? (stats.neighborhoods.length === 1
-                    ? `${stats.neighborhoods[0]} Mahallesi Saha Dağılımı`
-                    : 'Sorumlu Olduğunuz Mahallelerin Saha Dağılımı')
-                  : 'Mahallelere Göre Saha Dağılımı'}
+                    ? `${stats.neighborhoods[0]} Mahallesi Saha & Seçim Dağılımı`
+                    : 'Sorumlu Olduğunuz Mahallelerin Saha & Seçim Dağılımı')
+                  : 'Mahallelere Göre Saha & Seçim Günü Dağılımı'}
               </h3>
               <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: '4px 0 0' }}>
-                {stats?.isNeighborhoodScoped
-                  ? 'Size atanan mahallelere ait kayıtlı üye sayıları ve intiba durumları'
-                  : 'Mahalle bazında üye sayıları ve intiba dağılım detayları'}
+                Mahalle bazında üye sayıları, seçim günü oy kullanma katılımı ve intiba dağılımları
               </p>
             </div>
             <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
@@ -319,26 +375,27 @@ export default function Dashboard({ currentUser, onNavigateToMembers }) {
                 <tr>
                   <th>Mahalle Adı</th>
                   <th style={{ textAlign: 'right' }}>Toplam Üye</th>
-                  <th style={{ textAlign: 'right' }}>Görüşülen</th>
-                  <th style={{ textAlign: 'right' }}>Oran</th>
+                  <th style={{ textAlign: 'right' }}>🗳️ Oy Kullanan</th>
+                  <th style={{ textAlign: 'right' }}>Katılım %</th>
+                  <th style={{ textAlign: 'right' }}>Görüşülen %</th>
                   <th style={{ textAlign: 'right' }}>🟢 Destek</th>
                   <th style={{ textAlign: 'right' }}>🟡 Kararsız</th>
                   <th style={{ textAlign: 'right' }}>🔴 Mesafeli</th>
+                  <th style={{ textAlign: 'right' }}>🟣 Gelmeyecek</th>
                   <th style={{ textAlign: 'right' }}>İşlem</th>
                 </tr>
               </thead>
               <tbody>
                 {(!stats?.neighborhoodsData || stats.neighborhoodsData.length === 0) ? (
                   <tr>
-                    <td colSpan="8" style={{ textAlign: 'center', padding: '36px', color: 'var(--text-muted)' }}>
+                    <td colSpan="10" style={{ textAlign: 'center', padding: '36px', color: 'var(--text-muted)' }}>
                       Kayıtlı mahalle verisi bulunamadı.
                     </td>
                   </tr>
                 ) : (
                   stats.neighborhoodsData.map((row) => {
-                    const rate = row.total_members > 0 
-                      ? Math.round((row.contacted_count / row.total_members) * 100) 
-                      : 0;
+                    const contactRateRow = row.contact_rate !== undefined ? row.contact_rate : (row.total_members > 0 ? Math.round((row.contacted_count / row.total_members) * 100) : 0);
+                    const votingRateRow = row.voting_rate !== undefined ? row.voting_rate : (row.total_members > 0 ? Math.round(((row.voted_count || 0) / row.total_members) * 100) : 0);
 
                     return (
                       <tr key={row.neighborhood}>
@@ -349,16 +406,21 @@ export default function Dashboard({ currentUser, onNavigateToMembers }) {
                           </span>
                         </td>
                         <td data-label="Toplam Üye" style={{ textAlign: 'right', fontWeight: 600 }}>{row.total_members}</td>
-                        <td data-label="Görüşülen" style={{ textAlign: 'right', fontWeight: 600, color: 'var(--success)' }}>
-                          {row.contacted_count}
+                        <td data-label="Oy Kullanan" style={{ textAlign: 'right', fontWeight: 700, color: 'var(--success)' }}>
+                          {row.voted_count || 0}
                         </td>
-                        <td data-label="Oran" style={{ textAlign: 'right' }}>
+                        <td data-label="Katılım %" style={{ textAlign: 'right' }}>
                           <span style={{ 
                             fontSize: '12px', 
                             fontWeight: 700, 
-                            color: rate > 50 ? 'var(--success)' : rate > 20 ? 'var(--warning)' : 'var(--text-muted)' 
+                            color: votingRateRow > 50 ? 'var(--success)' : votingRateRow > 20 ? 'var(--warning)' : 'var(--text-muted)' 
                           }}>
-                            %{rate}
+                            %{votingRateRow}
+                          </span>
+                        </td>
+                        <td data-label="Görüşülen %" style={{ textAlign: 'right' }}>
+                          <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)' }}>
+                            %{contactRateRow}
                           </span>
                         </td>
                         <td data-label="🟢 Destek" style={{ textAlign: 'right', color: '#10b981', fontWeight: 600 }}>
@@ -369,6 +431,9 @@ export default function Dashboard({ currentUser, onNavigateToMembers }) {
                         </td>
                         <td data-label="🔴 Mesafeli" style={{ textAlign: 'right', color: '#ef4444', fontWeight: 600 }}>
                           {row.mesafeli_count || 0}
+                        </td>
+                        <td data-label="🟣 Gelmeyecek" style={{ textAlign: 'right', color: '#c084fc', fontWeight: 600 }}>
+                          {row.gelmeyecek_count || 0}
                         </td>
                         <td className="cell-actions" style={{ textAlign: 'right' }}>
                           {onNavigateToMembers && (
@@ -395,7 +460,7 @@ export default function Dashboard({ currentUser, onNavigateToMembers }) {
           <div className="section-head">
             <div>
               <h3 style={{ fontSize: '16px', fontWeight: 700, margin: 0 }}>
-                {isAdmin ? 'Mahalle Sorumluları Görüşme Performansı (Tüm Mahalleler)' : 'Kişisel Saha İletişim Performansınız'}
+                {isAdmin ? 'Mahalle Sorumluları Saha İletişim Performansı' : 'Kişisel Saha İletişim Performansınız'}
               </h3>
               <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: '4px 0 0' }}>
                 {isAdmin 
