@@ -2,6 +2,35 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../utils/api';
 import { Upload, FileSpreadsheet, RefreshCw, ArrowLeft, Play } from 'lucide-react';
 
+function previewResolvedStance(rawVal) {
+  if (!rawVal) return { code: 'BELIRTILMEDI', label: '⚪ Henüz Görüşülmedi' };
+  const norm = rawVal
+    .toString()
+    .trim()
+    .toUpperCase()
+    .replace(/İ/g, 'I')
+    .replace(/İ/g, 'I')
+    .replace(/Ğ/g, 'G')
+    .replace(/Ü/g, 'U')
+    .replace(/Ş/g, 'S')
+    .replace(/Ö/g, 'O')
+    .replace(/Ç/g, 'C');
+
+  if (norm.includes('MAVI') || norm.includes('DESTEK') || norm.includes('YESIL') || norm.includes('OLUMLU')) {
+    return { code: 'DESTEKLIYOR', label: '🟢 Destekliyor' };
+  }
+  if (norm.includes('SARI') || norm.includes('KARARSIZ') || norm.includes('ORTADA')) {
+    return { code: 'KARARSIZ', label: '🟡 Kararsız' };
+  }
+  if (norm.includes('KIRMIZI') || norm.includes('MESAFE') || norm.includes('OLUMSUZ')) {
+    return { code: 'MESAFELI', label: '🔴 Mesafeli' };
+  }
+  if (norm.includes('GRI') || norm.includes('GELMEYECEK') || norm.includes('MOR')) {
+    return { code: 'GELMEYECEK', label: '🟣 Oy Vermeye Gelmeyecek' };
+  }
+  return { code: 'BELIRTILMEDI', label: '⚪ Henüz Görüşülmedi (Mevcudu Korur)' };
+}
+
 export default function UploadPage({ onUploadStart }) {
   const [district, setDistrict] = useState('Gölcük');
   const [file, setFile] = useState(null);
@@ -21,7 +50,10 @@ export default function UploadPage({ onUploadStart }) {
     first_name: '',
     last_name: '',
     phone: '',
-    neighborhood: ''
+    neighborhood: '',
+    vote_stance: '',
+    caller: '',
+    note: ''
   });
 
   useEffect(() => {
@@ -77,7 +109,10 @@ export default function UploadPage({ onUploadStart }) {
         first_name: response.guessedMapping?.first_name || '',
         last_name: response.guessedMapping?.last_name || '',
         phone: response.guessedMapping?.phone || '',
-        neighborhood: response.guessedMapping?.neighborhood || ''
+        neighborhood: response.guessedMapping?.neighborhood || '',
+        vote_stance: response.guessedMapping?.vote_stance || '',
+        caller: response.guessedMapping?.caller || '',
+        note: response.guessedMapping?.note || ''
       });
       setStep('mapping');
     } catch (err) {
@@ -145,8 +180,10 @@ export default function UploadPage({ onUploadStart }) {
     <div className="page-container">
       <div className="page-header">
         <div className="page-title-area">
-          <h2 className="page-title">Excel Üye Listesi İçe Aktar</h2>
-          <span className="page-subtitle">Gölcük üye listesini (SNo, Adı, Soyadı, Telefon, Mahalle) sisteme aktarın</span>
+          <h2 className="page-title">Excel Üye Listesi & Durum Güncelleme</h2>
+          <span className="page-subtitle">
+            Mevcut üyeleri mükerrer kayıt oluşturmadan karşılaştırır, değişen renk/intiba durumlarını ve saha notlarını günceller
+          </span>
         </div>
       </div>
 
@@ -157,8 +194,30 @@ export default function UploadPage({ onUploadStart }) {
         <div className="upload-split-layout">
           {/* Step 1: Upload form */}
           <div className="table-container panel">
-            <h3 style={{ fontSize: '16px', marginBottom: '24px', color: 'var(--text-main)' }}>1. Aşama: Excel Dosyası Seçimi</h3>
+            <h3 style={{ fontSize: '16px', marginBottom: '16px', color: 'var(--text-main)' }}>1. Aşama: Excel Dosyası Seçimi</h3>
             
+            <div style={{
+              backgroundColor: 'rgba(59, 130, 246, 0.08)',
+              border: '1px solid rgba(59, 130, 246, 0.25)',
+              borderRadius: 'var(--radius-md)',
+              padding: '12px 14px',
+              marginBottom: '20px',
+              fontSize: '12.5px',
+              color: 'var(--text-muted)',
+              lineHeight: 1.5
+            }}>
+              <div style={{ fontWeight: 700, color: 'var(--text-main)', marginBottom: '4px' }}>
+                Renk &rarr; Seçmen İntibası Eşleştirme Kuralları:
+              </div>
+              <div>
+                <strong>MAVİ</strong> &rarr; 🟢 Destekliyor &nbsp;|&nbsp; 
+                <strong>SARI</strong> &rarr; 🟡 Kararsız &nbsp;|&nbsp; 
+                <strong>KIRMIZI</strong> &rarr; 🔴 Mesafeli &nbsp;|&nbsp; 
+                <strong>GRİ</strong> &rarr; 🟣 Oy Vermeye Gelmeyecek &nbsp;|&nbsp; 
+                <strong>BEYAZ</strong> &rarr; ⚪ Görüşülmedi <em>(DB&apos;de işaretli olanları ezmez)</em>
+              </div>
+            </div>
+
             <form onSubmit={handleAnalyzeSubmit}>
               <div className="form-group">
                 <label>Hedef İlçe</label>
@@ -209,7 +268,7 @@ export default function UploadPage({ onUploadStart }) {
                       <div>
                         <div style={{ fontWeight: 600, color: 'var(--text-muted)', fontSize: '14px' }}>Dosya seçin veya buraya sürükleyin</div>
                         <div style={{ color: 'var(--text-dim)', fontSize: '12px', marginTop: '4px' }}>
-                          Örnek format: SNo, Adı, Soyadı, Telefon, Mahalle
+                          Sıra No, Adı, Soyadı, Telefon, Orijinal Mahalle, Durum (Renk), Arama Sorumlusu, Lojistik Notlar
                         </div>
                       </div>
                     )}
@@ -252,7 +311,7 @@ export default function UploadPage({ onUploadStart }) {
                       <th style={{ padding: '8px 12px' }}>Dosya</th>
                       <th style={{ padding: '8px 12px' }}>İlçe</th>
                       <th style={{ padding: '8px 12px' }}>Durum</th>
-                      <th style={{ padding: '8px 12px' }}>Açıklama</th>
+                      <th style={{ padding: '8px 12px' }}>Sonuç Özeti</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -263,7 +322,7 @@ export default function UploadPage({ onUploadStart }) {
                         </td>
                         <td data-label="İlçe" style={{ padding: '10px 12px' }}>{log.district}</td>
                         <td data-label="Durum" style={{ padding: '10px 12px', fontWeight: 600 }}>{getStatusBadge(log.status)}</td>
-                        <td className="cell-full" data-label="Açıklama" style={{ padding: '10px 12px', color: 'var(--text-muted)', fontSize: '11px' }}>{log.error || 'İşlem bekliyor'}</td>
+                        <td className="cell-full" data-label="Sonuç Özeti" style={{ padding: '10px 12px', color: 'var(--text-muted)', fontSize: '11px' }}>{log.error || 'İşlem bekliyor'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -293,7 +352,7 @@ export default function UploadPage({ onUploadStart }) {
               <div className="form-group">
                 <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                   <span>Sıra No (SNo)</span>
-                  <span style={{ color: 'var(--text-dim)', fontSize: '11px' }}>(Opsiyonel)</span>
+                  <span style={{ color: 'var(--primary)', fontSize: '11px', fontWeight: 600 }}>(Eşleştirme Anahtarı)</span>
                 </label>
                 <select className="form-control" value={mapping.sno} onChange={(e) => handleMappingChange('sno', e.target.value)}>
                   <option value="">-- Eşleştirme Yok --</option>
@@ -345,12 +404,45 @@ export default function UploadPage({ onUploadStart }) {
                 </select>
               </div>
 
+              <div className="form-group">
+                <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span>Durum (Renk) / İntiba</span>
+                  <span style={{ color: '#10b981', fontSize: '11px', fontWeight: 600 }}>(Mavi/Sarı/Kırmızı/Gri)</span>
+                </label>
+                <select className="form-control" value={mapping.vote_stance} onChange={(e) => handleMappingChange('vote_stance', e.target.value)}>
+                  <option value="">-- Eşleştirme Yok --</option>
+                  {excelHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span>Arama Sorumlusu</span>
+                  <span style={{ color: 'var(--text-dim)', fontSize: '11px' }}>(Görüşme Notuna Eklenir)</span>
+                </label>
+                <select className="form-control" value={mapping.caller} onChange={(e) => handleMappingChange('caller', e.target.value)}>
+                  <option value="">-- Eşleştirme Yok --</option>
+                  {excelHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span>Lojistik / Ek Notlar</span>
+                  <span style={{ color: 'var(--text-dim)', fontSize: '11px' }}>(Görüşme Notuna Eklenir)</span>
+                </label>
+                <select className="form-control" value={mapping.note} onChange={(e) => handleMappingChange('note', e.target.value)}>
+                  <option value="">-- Eşleştirme Yok --</option>
+                  {excelHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                </select>
+              </div>
+
             </div>
 
             {/* Live Preview Table */}
             <div style={{ marginTop: '24px' }}>
               <h4 style={{ fontSize: '14px', marginBottom: '16px', color: 'var(--text-muted)', fontWeight: 600 }}>
-                Canlı Önizleme (Seçtiğiniz sütunlara göre ilk satırlar)
+                Canlı Önizleme (Seçtiğiniz sütunlara göre ilk satırlar ve dönüşecek statüler)
               </h4>
               <div style={{ overflowX: 'auto', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)' }}>
                 <table className="custom-table" style={{ width: '100%', fontSize: '13px' }}>
@@ -361,28 +453,55 @@ export default function UploadPage({ onUploadStart }) {
                       <th>Soyadı</th>
                       <th>Telefon</th>
                       <th>Mahalle</th>
+                      <th>Excel Renk &rarr; Sistem Statüsü</th>
+                      <th>Eklenecek Görüşme Notu</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {previewRows.map((row, idx) => (
-                      <tr key={idx}>
-                        <td style={{ color: mapping.sno ? 'var(--text-main)' : 'var(--text-dim)', fontWeight: 600, fontFamily: 'monospace' }}>
-                          {mapping.sno ? String(row[mapping.sno] || '') : '—'}
-                        </td>
-                        <td style={{ fontWeight: 600, color: mapping.first_name ? 'var(--text-main)' : 'var(--text-dim)' }}>
-                          {mapping.first_name ? String(row[mapping.first_name] || '').toUpperCase() : '—'}
-                        </td>
-                        <td style={{ fontWeight: 600, color: mapping.last_name ? 'var(--text-main)' : 'var(--text-dim)' }}>
-                          {mapping.last_name ? String(row[mapping.last_name] || '').toUpperCase() : '—'}
-                        </td>
-                        <td style={{ color: mapping.phone ? 'var(--text-main)' : 'var(--text-dim)' }}>
-                          {mapping.phone ? String(row[mapping.phone] || '') : '—'}
-                        </td>
-                        <td style={{ color: mapping.neighborhood ? 'var(--text-main)' : 'var(--text-dim)', fontWeight: 500 }}>
-                          {mapping.neighborhood ? String(row[mapping.neighborhood] || '') : '—'}
-                        </td>
-                      </tr>
-                    ))}
+                    {previewRows.map((row, idx) => {
+                      const rawColor = mapping.vote_stance ? String(row[mapping.vote_stance] || '') : '';
+                      const resolved = previewResolvedStance(rawColor);
+                      const callerVal = mapping.caller ? String(row[mapping.caller] || '').trim() : '';
+                      const noteVal = mapping.note ? String(row[mapping.note] || '').trim() : '';
+                      const previewNote = [
+                        callerVal ? `Arama Sorumlusu: ${callerVal}` : '',
+                        noteVal ? `Not: ${noteVal}` : ''
+                      ].filter(Boolean).join(' | ');
+
+                      return (
+                        <tr key={idx}>
+                          <td style={{ color: mapping.sno ? 'var(--text-main)' : 'var(--text-dim)', fontWeight: 600, fontFamily: 'monospace' }}>
+                            {mapping.sno ? String(row[mapping.sno] || '') : '—'}
+                          </td>
+                          <td style={{ fontWeight: 600, color: mapping.first_name ? 'var(--text-main)' : 'var(--text-dim)' }}>
+                            {mapping.first_name ? String(row[mapping.first_name] || '').toUpperCase() : '—'}
+                          </td>
+                          <td style={{ fontWeight: 600, color: mapping.last_name ? 'var(--text-main)' : 'var(--text-dim)' }}>
+                            {mapping.last_name ? String(row[mapping.last_name] || '').toUpperCase() : '—'}
+                          </td>
+                          <td style={{ color: mapping.phone ? 'var(--text-main)' : 'var(--text-dim)' }}>
+                            {mapping.phone ? String(row[mapping.phone] || '') : '—'}
+                          </td>
+                          <td style={{ color: mapping.neighborhood ? 'var(--text-main)' : 'var(--text-dim)', fontWeight: 500 }}>
+                            {mapping.neighborhood ? String(row[mapping.neighborhood] || '') : '—'}
+                          </td>
+                          <td>
+                            {rawColor ? (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>{rawColor}</span>
+                                <span>&rarr;</span>
+                                <span className={`stance-badge ${resolved.code}`}>
+                                  {resolved.label}
+                                </span>
+                              </div>
+                            ) : '—'}
+                          </td>
+                          <td style={{ color: previewNote ? 'var(--text-main)' : 'var(--text-dim)', fontSize: '12px' }}>
+                            {previewNote || '—'}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -400,7 +519,7 @@ export default function UploadPage({ onUploadStart }) {
                 disabled={uploading}
               >
                 <Play size={14} />
-                <span>{uploading ? 'Aktarılıyor...' : 'Aktarımı Başlat'}</span>
+                <span>{uploading ? 'Aktarılıyor...' : 'Karşılaştır ve Güncellemeyi Başlat'}</span>
               </button>
             </div>
 

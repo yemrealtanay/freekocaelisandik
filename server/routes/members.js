@@ -169,9 +169,9 @@ router.get('/', requireAuth, async (req, res) => {
 
     const query = `
       SELECT m.*, 
-        (SELECT t.note FROM timeline_events t WHERE t.member_id = m.id ORDER BY t.created_at DESC LIMIT 1) as latest_note, 
-        (SELECT t.date FROM timeline_events t WHERE t.member_id = m.id ORDER BY t.created_at DESC LIMIT 1) as latest_action_date,
-        (SELECT u.name FROM timeline_events t JOIN users u ON t.user_id = u.id WHERE t.member_id = m.id ORDER BY t.created_at DESC LIMIT 1) as latest_action_user
+        (SELECT t.note FROM timeline_events t WHERE t.member_id = m.id ORDER BY CASE WHEN t.type IN ('SYSTEM', 'SISTEM') THEN 1 ELSE 0 END, t.created_at DESC, t.rowid DESC LIMIT 1) as latest_note, 
+        (SELECT t.date FROM timeline_events t WHERE t.member_id = m.id ORDER BY CASE WHEN t.type IN ('SYSTEM', 'SISTEM') THEN 1 ELSE 0 END, t.created_at DESC, t.rowid DESC LIMIT 1) as latest_action_date,
+        (SELECT u.name FROM timeline_events t JOIN users u ON t.user_id = u.id WHERE t.member_id = m.id ORDER BY CASE WHEN t.type IN ('SYSTEM', 'SISTEM') THEN 1 ELSE 0 END, t.created_at DESC, t.rowid DESC LIMIT 1) as latest_action_user
       FROM members m 
       WHERE ${whereClause}
       ORDER BY CASE WHEN m.sno IS NULL THEN 1 ELSE 0 END, m.sno ASC, m.first_name ASC
@@ -498,7 +498,7 @@ router.get('/:id/timeline', requireAuth, async (req, res) => {
        FROM timeline_events t 
        LEFT JOIN users u ON t.user_id = u.id 
        WHERE t.member_id = ? 
-       ORDER BY t.created_at DESC`,
+       ORDER BY t.created_at DESC, t.rowid DESC`,
       [id]
     );
 

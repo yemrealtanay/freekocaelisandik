@@ -31,7 +31,8 @@ function buildSearchIndex(member) {
     member.last_name,
     member.phone,
     member.neighborhood,
-    member.district
+    member.district,
+    member.extra_search
   ];
   return parts.filter(Boolean).map(normalizeText).join(' ');
 }
@@ -40,7 +41,7 @@ function parseExcelWorksheet(worksheet) {
   const rawRows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
   if (!rawRows || rawRows.length === 0) return { headers: [], dataRows: [], headerRowIndex: 0 };
 
-  const keywords = ['sno', 'ad', 'adi', 'soyad', 'soyadi', 'telefon', 'mahalle'];
+  const keywords = ['sno', 'sirano', 'ad', 'adi', 'soyad', 'soyadi', 'telefon', 'mahalle', 'durum', 'renk'];
   let headerRowIndex = 0;
   for (let i = 0; i < Math.min(rawRows.length, 15); i++) {
     const row = rawRows[i];
@@ -153,7 +154,10 @@ router.post('/analyze', requireAdmin, upload.single('excel'), async (req, res) =
       first_name: '',
       last_name: '',
       phone: '',
-      neighborhood: ''
+      neighborhood: '',
+      vote_stance: '',
+      caller: '',
+      note: ''
     };
 
     const normalize = (str) => {
@@ -169,17 +173,23 @@ router.post('/analyze', requireAdmin, upload.single('excel'), async (req, res) =
     };
 
     const ruleMaps = {
-      sno: ['sno', 'sirano', 'sira', 'sn', 'no'],
+      sno: ['sirano', 'sno', 'sira', 'sn', 'no'],
       first_name: ['adi', 'ad', 'isim', 'firstname', 'adiniz'],
       last_name: ['soyadi', 'soyad', 'soyisim', 'lastname', 'soyadiniz'],
       phone: ['telefon', 'ceptelefon', 'tel', 'phone', 'gsm', 'cep', 'mobil', 'telefonno'],
-      neighborhood: ['mahalle', 'mah', 'mahallesi', 'koy', 'semt', 'adres']
+      neighborhood: ['orijinalmahalle', 'mahalle', 'mah', 'mahallesi', 'koy', 'semt', 'adres'],
+      vote_stance: ['durumrenk', 'durum', 'renk', 'intiba', 'secmenintibasi', 'statu'],
+      caller: ['aramasorumlusu', 'aramasorumlusufsutunu', 'arayan', 'arama'],
+      note: ['lojistikeknotlar', 'lojistikeknotlarghsutunu', 'lojistik', 'eknotlar', 'notlar', 'not', 'aciklama']
     };
 
     headers.forEach(header => {
       const normHeader = normalize(header);
       Object.keys(ruleMaps).forEach(field => {
         if (!guessedMapping[field]) {
+          if (field === 'neighborhood' && (normHeader.includes('sorumlu') || normHeader.includes('grubu'))) {
+            return;
+          }
           const matches = ruleMaps[field].some(kw => normHeader === kw || normHeader.includes(kw));
           if (matches) {
             guessedMapping[field] = header;
@@ -258,6 +268,47 @@ function resolveGolcukNeighborhood(raw) {
   return match || 'MERKEZ MAH.';
 }
 
+// Map Excel color / status values to system vote_stance enum
+function resolveVoteStance(rawVal) {
+  if (!rawVal) return null;
+  const norm = rawVal
+    .toString()
+    .trim()
+    .toUpperCase()
+    .replace(/İ/g, 'I')
+    .replace(/İ/g, 'I')
+    .replace(/Ğ/g, 'G')
+    .replace(/Ü/g, 'U')
+    .replace(/Ş/g, 'S')
+    .replace(/Ö/g, 'O')
+    .replace(/Ç/g, 'C');
+
+  if (norm.includes('MAVI') || norm.includes('DESTEK') || norm.includes('YESIL') || norm.includes('OLUMLU')) {
+    return 'DESTEKLIYOR';
+  }
+  if (norm.includes('SARI') || norm.includes('KARARSIZ') || norm.includes('ORTADA')) {
+    return 'KARARSIZ';
+  }
+  if (norm.includes('KIRMIZI') || norm.includes('MESAFE') || norm.includes('OLUMSUZ')) {
+    return 'MESAFELI';
+  }
+  if (norm.includes('GRI') || norm.includes('GELMEYECEK') || norm.includes('MOR')) {
+    return 'GELMEYECEK';
+  }
+  if (norm.includes('BEYAZ') || norm.includes('BELIRTILMEDI') || norm.includes('GORUSULMEDI')) {
+    return 'BELIRTILMEDI';
+  }
+  return null;
+}
+
+const STANCE_LABELS = {
+  DESTEKLIYOR: 'Destekliyor',
+  KARARSIZ: 'Kararsız',
+  MESAFELI: 'Mesafeli',
+  GELMEYECEK: 'Oy Vermeye Gelmeyecek',
+  BELIRTILMEDI: 'Henüz Görüşülmedi'
+};
+
 // Background Worker
 async function processExcelInBackground(uploadId, filePath, district, userId, mapping) {
   let db;
@@ -272,18 +323,24 @@ async function processExcelInBackground(uploadId, filePath, district, userId, ma
     
     const { dataRows: rows } = parseExcelWorksheet(worksheet);
 
-    let successCount = 0;
+    let insertedCount = 0;
+    let stanceUpdatedCount = 0;
+    let unchangedCount = 0;
+    let noteAddedCount = 0;
     let errorCount = 0;
 
     const today = new Date().toISOString().split('T')[0];
     const targetDistrict = district || 'Gölcük';
 
     const map = mapping || {
-      sno: 'SNo',
+      sno: 'Sıra No',
       first_name: 'Adı',
       last_name: 'Soyadı',
       phone: 'Telefon',
-      neighborhood: 'Mahalle'
+      neighborhood: 'Orijinal Mahalle',
+      vote_stance: 'Durum (Renk)',
+      caller: 'Arama Sorumlusu (F Sütunu)',
+      note: 'Lojistik / Ek Notlar (G-H Sütunu)'
     };
 
     await db.run('BEGIN TRANSACTION');
@@ -299,18 +356,28 @@ async function processExcelInBackground(uploadId, filePath, district, userId, ma
         return '';
       };
 
-      const rawSno = getValue('sno', ['SNo', 'S.No', 'Sira', 'No']);
+      const rawSno = getValue('sno', ['Sıra No', 'SNo', 'S.No', 'Sira', 'No']);
       const parsedSno = rawSno ? parseInt(rawSno, 10) : null;
       const firstName = getValue('first_name', ['Adı', 'Adi', 'AD', 'Ad']).toUpperCase();
       const lastName = getValue('last_name', ['Soyadı', 'Soyadi', 'SOYADI', 'Soyad']).toUpperCase();
       const rawPhone = getValue('phone', ['Telefon', 'TELEFON', 'CepTelefon', 'Tel']);
-      const rawNeighborhood = getValue('neighborhood', ['Mahalle', 'MAHALLE', 'Mah']);
+      const rawNeighborhood = getValue('neighborhood', ['Orijinal Mahalle', 'Mahalle', 'MAHALLE', 'Mah']);
+      const rawStance = getValue('vote_stance', ['Durum (Renk)', 'Durum', 'Renk', 'Seçmen İntibası']);
+      const rawCaller = getValue('caller', ['Arama Sorumlusu (F Sütunu)', 'Arama Sorumlusu']);
+      const rawNote = getValue('note', ['Lojistik / Ek Notlar (G-H Sütunu)', 'Lojistik / Ek Notlar', 'Notlar', 'Açıklama']);
 
       if (!firstName || !lastName) {
         continue;
       }
 
       const neighborhood = resolveGolcukNeighborhood(rawNeighborhood);
+      const excelStance = resolveVoteStance(rawStance);
+
+      // Build combined note from Caller (Arama Sorumlusu) and Logistics/Extra Note
+      const noteParts = [];
+      if (rawCaller) noteParts.push(`Arama Sorumlusu: ${rawCaller}`);
+      if (rawNote) noteParts.push(`Not: ${rawNote}`);
+      const combinedNote = noteParts.join(' | ');
 
       // Normalize phone
       let normalizedPhone = rawPhone.replace(/\D/g, '');
@@ -322,73 +389,169 @@ async function processExcelInBackground(uploadId, filePath, district, userId, ma
       }
 
       try {
+        // 1. Find existing member without creating duplicates
         let existingMember = null;
         if (parsedSno) {
           existingMember = await db.get(
-            'SELECT id, neighborhood, phone FROM members WHERE sno = ? AND district = ?',
+            'SELECT id, sno, neighborhood, phone, vote_stance, contact_status, last_contact_date FROM members WHERE sno = ? AND district = ?',
             [parsedSno, targetDistrict]
           );
         }
 
         if (!existingMember && normalizedPhone) {
           existingMember = await db.get(
-            'SELECT id, neighborhood, phone FROM members WHERE first_name = ? AND last_name = ? AND phone = ? AND district = ?',
+            'SELECT id, sno, neighborhood, phone, vote_stance, contact_status, last_contact_date FROM members WHERE first_name = ? AND last_name = ? AND phone = ? AND district = ?',
             [firstName, lastName, normalizedPhone, targetDistrict]
           );
         }
 
         if (!existingMember) {
           existingMember = await db.get(
-            'SELECT id, neighborhood, phone FROM members WHERE first_name = ? AND last_name = ? AND district = ?',
+            'SELECT id, sno, neighborhood, phone, vote_stance, contact_status, last_contact_date FROM members WHERE first_name = ? AND last_name = ? AND district = ?',
             [firstName, lastName, targetDistrict]
           );
         }
 
         if (existingMember) {
-          // Update existing member fields
+          const currentStance = existingMember.vote_stance || 'BELIRTILMEDI';
+          let nextStance = currentStance;
+          let nextContactStatus = existingMember.contact_status || 'GORUSULMEDI';
+          let nextLastContactDate = existingMember.last_contact_date || null;
+          let stanceChanged = false;
+
+          // Only update stance if Excel has a marked color (non-BEYAZ) and it differs from DB
+          if (excelStance && excelStance !== 'BELIRTILMEDI') {
+            if (currentStance !== excelStance) {
+              nextStance = excelStance;
+              stanceChanged = true;
+            }
+            nextContactStatus = 'GORUSULDU';
+            if (!nextLastContactDate) {
+              nextLastContactDate = today;
+            }
+          }
+
+          const finalNeighborhood = rawNeighborhood ? neighborhood : (existingMember.neighborhood || neighborhood);
+
           const searchIndex = buildSearchIndex({
-            sno: parsedSno,
+            sno: parsedSno || existingMember.sno,
             first_name: firstName,
             last_name: lastName,
             phone: normalizedPhone || existingMember.phone,
             district: targetDistrict,
-            neighborhood
+            neighborhood: finalNeighborhood,
+            extra_search: `${rawCaller} ${rawNote}`
           });
 
           await db.run(
             `UPDATE members 
-             SET sno = ?, phone = COALESCE(NULLIF(?, ''), phone), neighborhood = ?, search_index = ?, updated_at = CURRENT_TIMESTAMP 
+             SET sno = COALESCE(?, sno),
+                 phone = COALESCE(NULLIF(?, ''), phone),
+                 neighborhood = ?,
+                 vote_stance = ?,
+                 contact_status = ?,
+                 last_contact_date = ?,
+                 search_index = ?,
+                 updated_at = CURRENT_TIMESTAMP 
              WHERE id = ?`,
-            [parsedSno, normalizedPhone, neighborhood, searchIndex, existingMember.id]
+            [
+              parsedSno,
+              normalizedPhone,
+              finalNeighborhood,
+              nextStance,
+              nextContactStatus,
+              nextLastContactDate,
+              searchIndex,
+              existingMember.id
+            ]
           );
-          successCount++;
+
+          if (stanceChanged) {
+            stanceUpdatedCount++;
+          } else {
+            unchangedCount++;
+          }
+
+          // Insert note if caller / logistics note is present and not already recorded
+          if (combinedNote) {
+            const existingNote = await db.get(
+              'SELECT id FROM timeline_events WHERE member_id = ? AND note = ?',
+              [existingMember.id, combinedNote]
+            );
+            if (!existingNote) {
+              const eventId = 'event-' + Math.random().toString(36).substr(2, 9);
+              const eventType = rawCaller ? 'ARAMA' : 'NOT';
+              await db.run(
+                'INSERT INTO timeline_events (id, member_id, user_id, type, date, note) VALUES (?, ?, ?, ?, ?, ?)',
+                [eventId, existingMember.id, userId, eventType, today, combinedNote]
+              );
+              noteAddedCount++;
+            }
+          } else if (stanceChanged) {
+            const oldLabel = STANCE_LABELS[currentStance] || currentStance;
+            const newLabel = STANCE_LABELS[nextStance] || nextStance;
+            const changeNote = `Excel aktarımı ile seçmen intibası güncellendi: ${oldLabel} ➡️ ${newLabel}`;
+            const eventId = 'event-' + Math.random().toString(36).substr(2, 9);
+            await db.run(
+              'INSERT INTO timeline_events (id, member_id, user_id, type, date, note) VALUES (?, ?, ?, ?, ?, ?)',
+              [eventId, existingMember.id, userId, 'DURUM_DEGISIKLIGI', today, changeNote]
+            );
+          }
+
           continue;
         }
 
-        // Insert new member
+        // 2. Insert new member if not found in DB
         const memberId = 'member-' + Math.random().toString(36).substr(2, 9);
+        const initialStance = excelStance || 'BELIRTILMEDI';
+        const initialContactStatus = initialStance !== 'BELIRTILMEDI' ? 'GORUSULDU' : 'GORUSULMEDI';
+        const initialContactDate = initialStance !== 'BELIRTILMEDI' ? today : null;
+
         const searchIndex = buildSearchIndex({
           sno: parsedSno,
           first_name: firstName,
           last_name: lastName,
           phone: normalizedPhone,
           district: targetDistrict,
-          neighborhood
+          neighborhood,
+          extra_search: `${rawCaller} ${rawNote}`
         });
 
         await db.run(
-          `INSERT INTO members (id, sno, first_name, last_name, phone, district, neighborhood, vote_stance, contact_status, has_voted, search_index)
-           VALUES (?, ?, ?, ?, ?, ?, ?, 'BELIRTILMEDI', 'GORUSULMEDI', 0, ?)`,
-          [memberId, parsedSno, firstName, lastName, normalizedPhone, targetDistrict, neighborhood, searchIndex]
+          `INSERT INTO members (id, sno, first_name, last_name, phone, district, neighborhood, vote_stance, contact_status, has_voted, last_contact_date, search_index)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
+          [
+            memberId,
+            parsedSno,
+            firstName,
+            lastName,
+            normalizedPhone,
+            targetDistrict,
+            neighborhood,
+            initialStance,
+            initialContactStatus,
+            initialContactDate,
+            searchIndex
+          ]
         );
 
-        const eventId = 'event-' + Math.random().toString(36).substr(2, 9);
-        await db.run(
-          'INSERT INTO timeline_events (id, member_id, user_id, type, date, note) VALUES (?, ?, ?, ?, ?, ?)',
-          [eventId, memberId, userId, 'SYSTEM', today, 'Excel içe aktarma ile listeye eklendi.']
-        );
+        if (combinedNote) {
+          const eventId = 'event-' + Math.random().toString(36).substr(2, 9);
+          const eventType = rawCaller ? 'ARAMA' : 'NOT';
+          await db.run(
+            'INSERT INTO timeline_events (id, member_id, user_id, type, date, note) VALUES (?, ?, ?, ?, ?, ?)',
+            [eventId, memberId, userId, eventType, today, combinedNote]
+          );
+          noteAddedCount++;
+        } else {
+          const eventId = 'event-' + Math.random().toString(36).substr(2, 9);
+          await db.run(
+            'INSERT INTO timeline_events (id, member_id, user_id, type, date, note) VALUES (?, ?, ?, ?, ?, ?)',
+            [eventId, memberId, userId, 'SYSTEM', today, 'Excel içe aktarma ile listeye eklendi.']
+          );
+        }
 
-        successCount++;
+        insertedCount++;
       } catch (err) {
         console.error('Row insert error:', err, row);
         errorCount++;
@@ -397,9 +560,11 @@ async function processExcelInBackground(uploadId, filePath, district, userId, ma
 
     await db.run('COMMIT');
 
+    const summaryMsg = `Durumu Güncellenen: ${stanceUpdatedCount} | Not Eklenen: ${noteAddedCount} | Yeni Eklenen: ${insertedCount} | Aynı Kalan: ${unchangedCount}${errorCount > 0 ? ` | Hatalı: ${errorCount}` : ''}`;
+
     await db.run(
       'UPDATE uploads SET status = ?, error = ? WHERE id = ?',
-      ['COMPLETED', `Başarıyla işlenen: ${successCount}, Hatalı: ${errorCount}`, uploadId]
+      ['COMPLETED', summaryMsg, uploadId]
     );
 
   } catch (error) {
